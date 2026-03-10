@@ -21,6 +21,23 @@ export default function Dashboard() {
 
     useEffect(() => {
         fetch("/api/settings").then(res => res.json()).then(data => setSettings(data)).catch(err => console.error(err));
+
+        // Check if attendance already marked today (persists across refreshes)
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+            const user = JSON.parse(storedUser);
+            fetch(`/api/attendance/today?userId=${user.userId}`)
+                .then(res => res.json())
+                .then((records: { mealType: string; status: string }[]) => {
+                    const newMessages: { breakfast?: string; dinner?: string } = {};
+                    records.forEach(r => {
+                        if (r.mealType === "breakfast") newMessages.breakfast = `Breakfast marked as ${r.status}.`;
+                        if (r.mealType === "dinner") newMessages.dinner = `Dinner marked as ${r.status}.`;
+                    });
+                    if (Object.keys(newMessages).length > 0) setMessages(newMessages);
+                })
+                .catch(err => console.error(err));
+        }
     }, []);
 
     const now = new Date();

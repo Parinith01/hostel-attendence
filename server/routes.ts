@@ -12,6 +12,18 @@ export async function registerRoutes(
     res.json(s);
   });
 
+  app.get("/api/attendance/today", async (req, res) => {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ message: "userId required" });
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const dateStr = nowIST.getFullYear() + '-' +
+      String(nowIST.getMonth() + 1).padStart(2, '0') + '-' +
+      String(nowIST.getDate()).padStart(2, '0');
+    const allToday = await storage.getAttendanceByDate(dateStr);
+    const userAttendance = allToday.filter(a => a.userId === String(userId));
+    res.json(userAttendance);
+  });
+
   app.post("/api/settings", async (req, res) => {
     try {
       const s = await storage.updateSettings(req.body);
