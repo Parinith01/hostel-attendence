@@ -59,14 +59,20 @@ export async function registerRoutes(
     if (!user) return res.status(404).json({ message: "User not found." });
 
     const now = new Date();
-    const hourStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     const s = await storage.getSettings();
 
+    const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+    const inWindow = (start: string, end: string) => {
+      const s2 = toMin(start), e2 = toMin(end);
+      return e2 < s2 ? (currentMinutes >= s2 || currentMinutes <= e2) : (currentMinutes >= s2 && currentMinutes <= e2);
+    };
+
     let timeBoxedMeal = "";
-    if (hourStr >= s.breakfastStart && hourStr <= s.breakfastEnd) {
+    if (inWindow(s.breakfastStart, s.breakfastEnd)) {
       timeBoxedMeal = "breakfast";
-    } else if (hourStr >= s.dinnerStart && hourStr <= s.dinnerEnd) {
+    } else if (inWindow(s.dinnerStart, s.dinnerEnd)) {
       timeBoxedMeal = "dinner";
     }
 
