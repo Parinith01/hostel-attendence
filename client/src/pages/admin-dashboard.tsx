@@ -302,8 +302,8 @@ export default function AdminDashboard() {
                                 </p>
                             </div>
                         </div>
-                        <Link href="/" onClick={() => localStorage.removeItem('user')}>
-                            <span className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer text-red-400 hover:text-red-300 flex items-center justify-center group shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                        <Link href="/">
+                            <span onClick={() => localStorage.removeItem('user')} className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer text-red-400 hover:text-red-300 flex items-center justify-center group shadow-[0_0_10px_rgba(239,68,68,0.2)]">
                                 <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                             </span>
                         </Link>
