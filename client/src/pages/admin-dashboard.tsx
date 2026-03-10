@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Clock, Download, Settings as SettingsIcon, Save } from "lucide-react";
+import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Clock, Download, Settings as SettingsIcon, Save, Eye, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -21,6 +21,8 @@ type Attendance = {
     mealType: string;
     timestamp: string;
     verifiedByAdmin: boolean;
+    status: 'present' | 'absent';
+    absentReason: string | null;
 };
 
 type DashboardData = {
@@ -41,6 +43,7 @@ export default function AdminDashboard() {
     const [settings, setSettings] = useState<SettingsData>({ breakfastStart: '06:00', breakfastEnd: '09:00', dinnerStart: '18:00', dinnerEnd: '22:00' });
     const [loading, setLoading] = useState(true);
     const [savingSettings, setSavingSettings] = useState(false);
+    const [showStudentsModal, setShowStudentsModal] = useState(false);
     const { toast } = useToast();
 
     const fetchDashboard = async () => {
@@ -55,10 +58,11 @@ export default function AdminDashboard() {
 
             setData(dashJson);
             setSettings(setJson);
-        } catch (e) {
+        } catch (e: any) {
+            console.error("Dashboard fetch error:", e);
             toast({
                 title: "Error fetching data",
-                description: "Failed to load dashboard data.",
+                description: `Failed to load: ${e.message}`,
                 variant: "destructive"
             });
         } finally {
@@ -106,7 +110,6 @@ export default function AdminDashboard() {
                 body: JSON.stringify({ id, verifiedByAdmin: !currentlyVerified })
             });
             if (res.ok) {
-                // Instantly update UI optimistically
                 setData(prev => {
                     if (!prev) return prev;
                     return {
@@ -124,39 +127,55 @@ export default function AdminDashboard() {
         }
     };
 
-    const downloadStudentsPDF = () => {
-        const doc = new jsPDF();
-        doc.text("Registered Students Roster", 14, 15);
-        autoTable(doc, {
-            head: [['Full Name', 'User ID', 'Phone Number', 'Room', 'Block']],
-            body: data?.students.map(s => [s.fullName, s.userId, s.phoneNumber, s.roomNumber, s.hostelBlock]) || [],
-            startY: 20,
-            theme: 'grid',
-            headStyles: { fillColor: [236, 72, 153] }
-        });
-        doc.save("Registered_Students.pdf");
-    };
-
     const downloadAttendancePDF = () => {
         if (!data) return;
         const doc = new jsPDF();
         doc.text(`Hostel Attendance Report - ${data.date}`, 14, 15);
-        autoTable(doc, {
-            head: [['Student Name', 'Room No', 'Breakfast', 'Dinner']],
-            body: data.students.map(student => {
-                const b = data.attendances.find(a => a.userId === student.userId && a.mealType === 'breakfast');
-                const d = data.attendances.find(a => a.userId === student.userId && a.mealType === 'dinner');
+
+        const getRowData = (mealType: string) => {
+            return data.students.map(student => {
+                const mark = data.attendances.find(a => a.userId === student.userId && a.mealType === mealType);
+                let text = "Not Voted";
+                let style = { fillColor: [239, 68, 68], textColor: [255, 255, 255] }; // red
+
+                if (mark) {
+                    if (mark.status === "absent") {
+                        text = `Absent - Reason: ${mark.absentReason}`;
+                        style = { fillColor: [234, 179, 8], textColor: [0, 0, 0] }; // yellow with black text
+                    } else {
+                        text = mark.verifiedByAdmin ? 'Present (Verified)' : 'Present (Pending)';
+                        style = { fillColor: [34, 197, 94], textColor: [255, 255, 255] }; // green
+                    }
+                }
+
                 return [
                     student.fullName,
                     student.roomNumber,
-                    b ? (b.verifiedByAdmin ? 'Present (Verified)' : 'Present (Unverified)') : 'Absent',
-                    d ? (d.verifiedByAdmin ? 'Present (Verified)' : 'Present (Unverified)') : 'Absent'
+                    { content: text, styles: style }
                 ];
-            }),
-            startY: 20,
+            });
+        };
+
+        doc.text("Breakfast Attendance", 14, 25);
+        autoTable(doc, {
+            head: [['Student Name', 'Room No', 'Status']],
+            body: getRowData('breakfast'),
+            startY: 30,
             theme: 'grid',
             headStyles: { fillColor: [6, 182, 212] }
         });
+
+        const finalY = (doc as any).lastAutoTable.finalY || 30;
+
+        doc.text("Dinner Attendance", 14, finalY + 15);
+        autoTable(doc, {
+            head: [['Student Name', 'Room No', 'Status']],
+            body: getRowData('dinner'),
+            startY: finalY + 20,
+            theme: 'grid',
+            headStyles: { fillColor: [236, 72, 153] }
+        });
+
         doc.save(`Attendance_${data.date}.pdf`);
     };
 
@@ -166,6 +185,44 @@ export default function AdminDashboard() {
             description: `Disciplinary warning has been sent to ${student.fullName} (${student.userId}).`,
             variant: "destructive",
         });
+    };
+
+    const renderMarkBadge = (mark: Attendance | undefined) => {
+        if (!mark) {
+            return (
+                <div className="flex flex-col items-center">
+                    <XCircle className="w-5 h-5 text-red-500/50 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                    <span className="text-[10px] mt-1 text-red-400 font-bold uppercase tracking-wider">Not Voted</span>
+                </div>
+            );
+        }
+
+        if (mark.status === 'absent') {
+            return (
+                <div className="inline-flex flex-col items-center gap-1 p-2 rounded-xl bg-yellow-500/20 border border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)]">
+                    <AlertTriangle className="w-5 h-5 text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.8)]" />
+                    <span className="text-[10px] text-yellow-400 font-bold uppercase tracking-widest">ABSENT</span>
+                    <span className="text-[10px] text-yellow-200/70 max-w-[100px] truncate" title={mark.absentReason || ""}>
+                        {mark.absentReason}
+                    </span>
+                </div>
+            );
+        }
+
+        return (
+            <button
+                onClick={() => handleVerifyParams(mark.id, !!mark.verifiedByAdmin)}
+                className={`inline-flex flex-col items-center gap-1 p-2 rounded-xl border transition-all cursor-pointer ${mark.verifiedByAdmin ? 'bg-green-500/20 border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.3)]' : 'bg-white/5 border-white/10 hover:border-cyan-400/50'}`}
+            >
+                <CheckCircle className={`w-5 h-5 ${mark.verifiedByAdmin ? 'text-green-400 drop-shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]'}`} />
+                <span className={`text-[10px] flex items-center gap-1 tracking-widest ${mark.verifiedByAdmin ? 'text-green-400 font-bold' : 'text-muted-foreground'}`}>
+                    {mark.verifiedByAdmin ? 'VERIFIED' : 'PENDING'}
+                </span>
+                <span className="text-[10px] text-muted-foreground/50">
+                    {new Date(mark.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+            </button>
+        );
     };
 
     if (loading) {
@@ -181,22 +238,68 @@ export default function AdminDashboard() {
     const { students, attendances, date } = data;
 
     const totalStudents = students.length;
-    const breakfastPresent = attendances.filter(a => a.mealType === "breakfast").length;
-    const dinnerPresent = attendances.filter(a => a.mealType === "dinner").length;
+    const breakfastPresent = attendances.filter(a => a.mealType === "breakfast" && a.status === "present").length;
+    const dinnerPresent = attendances.filter(a => a.mealType === "dinner" && a.status === "present").length;
 
     return (
-        <div className="min-h-screen p-4 sm:p-8">
+        <div className="min-h-screen p-4 sm:p-8 relative">
             {/* Background Orbs */}
             <div className="bg-orb orb-1 fixed"></div>
             <div className="bg-orb orb-2 fixed"></div>
             <div className="bg-orb orb-3 fixed"></div>
 
+            {/* Students Modal */}
+            {showStudentsModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="glass-card w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl border border-white/20 overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <div>
+                                <h2 className="font-display tracking-widest text-xl font-bold text-white uppercase">Registered Students List</h2>
+                                <p className="text-sm text-muted-foreground mt-1">Total Active Directory: {totalStudents} Students</p>
+                            </div>
+                            <button onClick={() => setShowStudentsModal(false)} className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition">
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                        <div className="overflow-auto p-0 flex-1">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-white/5 sticky top-0 backdrop-blur-md">
+                                    <tr className="border-b border-white/10 text-muted-foreground/80 text-sm font-display tracking-wider">
+                                        <th className="p-4 font-normal">Full Name</th>
+                                        <th className="p-4 font-normal">User ID</th>
+                                        <th className="p-4 font-normal">Phone Number</th>
+                                        <th className="p-4 font-normal">Room Number</th>
+                                        <th className="p-4 font-normal">Hostel Block</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {students.map((s) => (
+                                        <tr key={s.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="p-4 text-white font-medium">{s.fullName}</td>
+                                            <td className="p-4 text-cyan-400">{s.userId}</td>
+                                            <td className="p-4 text-white/80">{s.phoneNumber}</td>
+                                            <td className="p-4 text-magenta-300 font-medium">{s.roomNumber}</td>
+                                            <td className="p-4 text-white/80">{s.hostelBlock}</td>
+                                        </tr>
+                                    ))}
+                                    {students.length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} className="p-8 text-center text-muted-foreground">No students registered yet.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="max-w-6xl mx-auto relative z-10 space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
 
                 {/* Header */}
-                <div className="glass-card p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-magenta-500/20">
+                <div className="glass-card p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-magenta-500/20 shadow-[0_0_30px_rgba(236,72,153,0.1)]">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-magenta-500/10 text-magenta-500 flex items-center justify-center glow-magenta">
+                        <div className="w-12 h-12 rounded-full bg-magenta-500/10 text-magenta-500 flex items-center justify-center shadow-[0_0_15px_rgba(236,72,153,0.4)] border border-magenta-500/20">
                             <Users className="w-6 h-6" />
                         </div>
                         <div>
@@ -210,14 +313,14 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="flex gap-4">
-                        <button onClick={downloadStudentsPDF} className="p-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 hover:text-white flex items-center justify-center transition-colors group text-sm font-display tracking-widest">
-                            <Download className="w-4 h-4 mr-2" /> STUDENTS PDF
+                        <button onClick={() => setShowStudentsModal(true)} className="px-5 py-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-sm font-display tracking-widest">
+                            <Eye className="w-4 h-4 mr-2" /> VIEW STUDENTS
                         </button>
-                        <button onClick={downloadAttendancePDF} className="p-3 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/20 text-magenta-400 hover:text-white flex items-center justify-center transition-colors group text-sm font-display tracking-widest">
-                            <Download className="w-4 h-4 mr-2" /> ATTENDANCE PDF
+                        <button onClick={downloadAttendancePDF} className="px-5 py-3 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/30 text-magenta-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] group text-sm font-display tracking-widest">
+                            <Download className="w-4 h-4 mr-2 group-hover:-translate-y-1 transition-transform" /> ATTENDANCE PDF
                         </button>
                         <Link href="/">
-                            <span className="p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer text-muted-foreground hover:text-white flex items-center justify-center border border-white/5 group h-full">
+                            <span className="p-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer text-red-400 hover:text-red-300 flex items-center justify-center group h-full shadow-[0_0_10px_rgba(239,68,68,0.2)]">
                                 <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                             </span>
                         </Link>
@@ -226,7 +329,9 @@ export default function AdminDashboard() {
 
                 {/* Settings Editor */}
                 <div className="glass-card p-6 rounded-2xl border border-white/10 gap-2">
-                    <h2 className="font-display tracking-widest text-lg font-semibold text-white mb-4 flex items-center gap-2"><SettingsIcon className="w-5 h-5 text-cyan-400" /> TIME SLOT CONFIGURATION</h2>
+                    <h2 className="font-display tracking-widest text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                        <SettingsIcon className="w-5 h-5 text-cyan-400" /> TIME SLOT CONFIGURATION
+                    </h2>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
@@ -248,7 +353,7 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="mt-4 flex justify-end">
-                        <button onClick={handleSaveSettings} disabled={savingSettings} className="px-6 py-3 rounded-xl bg-cyan-500 text-white font-bold tracking-wider hover:bg-cyan-400 transition-colors flex items-center gap-2 text-sm">
+                        <button onClick={handleSaveSettings} disabled={savingSettings} className="px-6 py-3 rounded-xl bg-cyan-500 text-white font-bold tracking-wider hover:bg-cyan-400 transition-colors flex items-center gap-2 text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)]">
                             {savingSettings ? "SAVING..." : <><Save className="w-4 h-4" /> SAVE TIME SLOTS</>}
                         </button>
                     </div>
@@ -257,7 +362,7 @@ export default function AdminDashboard() {
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2 relative overflow-hidden group">
-                        <span className="text-muted-foreground font-display tracking-widest text-sm relative z-10">BREAKFAST ATTENDANCE</span>
+                        <span className="text-muted-foreground font-display tracking-widest text-sm relative z-10">BREAKFAST PRESENT</span>
                         <span className="text-4xl font-bold text-white flex items-baseline gap-2 mb-1 relative z-10">
                             {breakfastPresent} <span className="text-base text-muted-foreground font-normal">/ {totalStudents}</span>
                         </span>
@@ -267,7 +372,7 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2 relative overflow-hidden group">
-                        <span className="text-muted-foreground font-display tracking-widest text-sm relative z-10">DINNER ATTENDANCE</span>
+                        <span className="text-muted-foreground font-display tracking-widest text-sm relative z-10">DINNER PRESENT</span>
                         <span className="text-4xl font-bold text-white flex items-baseline gap-2 mb-1 relative z-10">
                             {dinnerPresent} <span className="text-base text-muted-foreground font-normal">/ {totalStudents}</span>
                         </span>
@@ -278,9 +383,9 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Student List */}
-                <div className="glass-card rounded-2xl border border-white/10 overflow-hidden">
+                <div className="glass-card rounded-2xl border border-white/10 overflow-hidden backdrop-blur-md">
                     <div className="p-6 border-b border-white/5 bg-white/5 flex justify-between items-center">
-                        <h2 className="font-display tracking-widest text-lg font-semibold text-white">STUDENT VERIFICATION ROSTER</h2>
+                        <h2 className="font-display tracking-widest text-lg font-semibold text-white">LIVE VERIFICATION ROSTER</h2>
                     </div>
 
                     <div className="overflow-x-auto">
@@ -289,8 +394,8 @@ export default function AdminDashboard() {
                                 <tr className="border-b border-white/5 text-muted-foreground/80 text-sm font-display tracking-wider">
                                     <th className="p-4 font-normal">Student Info</th>
                                     <th className="p-4 font-normal">Room/Block</th>
-                                    <th className="p-4 font-normal text-center">Breakfast Status (Click to Verify)</th>
-                                    <th className="p-4 font-normal text-center">Dinner Status (Click to Verify)</th>
+                                    <th className="p-4 font-normal text-center">Breakfast Status</th>
+                                    <th className="p-4 font-normal text-center">Dinner Status</th>
                                     <th className="p-4 font-normal text-right">Action</th>
                                 </tr>
                             </thead>
@@ -303,43 +408,23 @@ export default function AdminDashboard() {
                                         <tr key={student.id} className="hover:bg-white/5 transition-colors">
                                             <td className="p-4 whitespace-nowrap">
                                                 <div className="flex flex-col">
-                                                    <span className="font-semibold text-white">{student.fullName}</span>
-                                                    <span className="text-xs text-muted-foreground tracking-wider">{student.userId} | {student.phoneNumber}</span>
+                                                    <span className="font-semibold text-white text-base">{student.fullName}</span>
+                                                    <span className="text-xs text-muted-foreground tracking-wider mt-0.5">{student.userId} | {student.phoneNumber}</span>
                                                 </div>
                                             </td>
                                             <td className="p-4 whitespace-nowrap text-muted-foreground">
                                                 {student.roomNumber} - {student.hostelBlock}
                                             </td>
                                             <td className="p-4 text-center">
-                                                {breakfastMark ? (
-                                                    <button onClick={() => handleVerifyParams(breakfastMark.id, !!breakfastMark.verifiedByAdmin)} className={`inline-flex flex-col items-center gap-1 p-2 rounded-xl border transition-all cursor-pointer ${breakfastMark.verifiedByAdmin ? 'bg-green-500/20 border-green-500/50 glow-cyan' : 'bg-white/5 border-white/10 hover:border-cyan-400/50'}`}>
-                                                        <CheckCircle className={`w-5 h-5 ${breakfastMark.verifiedByAdmin ? 'text-green-400' : 'text-cyan-400 glow-cyan'}`} />
-                                                        <span className={`text-[10px] flex items-center gap-1 ${breakfastMark.verifiedByAdmin ? 'text-green-400 font-bold' : 'text-muted-foreground'}`}>
-                                                            {breakfastMark.verifiedByAdmin ? 'VERIFIED' : 'PENDING'}
-                                                        </span>
-                                                        <span className="text-[10px] text-muted-foreground/50">{new Date(breakfastMark.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                                    </button>
-                                                ) : (
-                                                    <XCircle className="w-5 h-5 text-red-500/50 mx-auto" />
-                                                )}
+                                                {renderMarkBadge(breakfastMark)}
                                             </td>
                                             <td className="p-4 text-center">
-                                                {dinnerMark ? (
-                                                    <button onClick={() => handleVerifyParams(dinnerMark.id, !!dinnerMark.verifiedByAdmin)} className={`inline-flex flex-col items-center gap-1 p-2 rounded-xl border transition-all cursor-pointer ${dinnerMark.verifiedByAdmin ? 'bg-green-500/20 border-green-500/50 glow-cyan' : 'bg-white/5 border-white/10 hover:border-cyan-400/50'}`}>
-                                                        <CheckCircle className={`w-5 h-5 ${dinnerMark.verifiedByAdmin ? 'text-green-400' : 'text-cyan-400 glow-cyan'}`} />
-                                                        <span className={`text-[10px] flex items-center gap-1 ${dinnerMark.verifiedByAdmin ? 'text-green-400 font-bold' : 'text-muted-foreground'}`}>
-                                                            {dinnerMark.verifiedByAdmin ? 'VERIFIED' : 'PENDING'}
-                                                        </span>
-                                                        <span className="text-[10px] text-muted-foreground/50">{new Date(dinnerMark.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                                    </button>
-                                                ) : (
-                                                    <XCircle className="w-5 h-5 text-red-500/50 mx-auto" />
-                                                )}
+                                                {renderMarkBadge(dinnerMark)}
                                             </td>
                                             <td className="p-4 text-right">
                                                 <button
                                                     onClick={() => sendWarning(student)}
-                                                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40 transition-colors text-xs font-display tracking-widest font-semibold"
+                                                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40 transition-colors text-xs font-display tracking-widest font-semibold cursor-pointer"
                                                 >
                                                     <AlertTriangle className="w-3 h-3" />
                                                     WARN
@@ -351,8 +436,8 @@ export default function AdminDashboard() {
 
                                 {students.length === 0 && (
                                     <tr>
-                                        <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                                            No students are currently registered in the database.
+                                        <td colSpan={5} className="p-8 text-center text-muted-foreground" style={{ height: '200px' }}>
+                                            No students found in the roster.
                                         </td>
                                     </tr>
                                 )}

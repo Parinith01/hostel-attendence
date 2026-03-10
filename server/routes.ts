@@ -54,7 +54,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/attendance", async (req, res) => {
-    const { userId } = req.body;
+    const { userId, status, absentReason } = req.body;
     const user = await storage.getUserByUserId(userId);
     if (!user) return res.status(404).json({ message: "User not found." });
 
@@ -72,6 +72,10 @@ export async function registerRoutes(
       return res.status(400).json({ message: `Outside attendance windows (Breakfast: ${s.breakfastStart}-${s.breakfastEnd} / Dinner: ${s.dinnerStart}-${s.dinnerEnd}).` });
     }
 
+    if (status === "absent" && !absentReason) {
+      return res.status(400).json({ message: "Must provide a reason when marking absent." });
+    }
+
     const dateStr = now.toISOString().split('T')[0];
     const existing = await storage.getAttendanceByUserAndDate(userId, dateStr, mealType);
     if (existing) {
@@ -82,12 +86,14 @@ export async function registerRoutes(
       userId,
       date: dateStr,
       mealType,
-      timestamp: now.toISOString()
+      timestamp: now.toISOString(),
+      status: status || "present",
+      absentReason: absentReason || null
     });
 
     res.status(201).json({
       ...att,
-      message: `Successfully marked ${mealType} attendance.`
+      message: `Successfully marked ${mealType} as ${status || "present"}.`
     });
   });
 

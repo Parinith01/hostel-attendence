@@ -7,6 +7,8 @@ export default function Dashboard() {
     const [isLoading, setIsLoading] = useState(false);
     const [marked, setMarked] = useState(false);
     const [message, setMessage] = useState("");
+    const [absentMode, setAbsentMode] = useState(false);
+    const [absentReason, setAbsentReason] = useState("");
     const { toast } = useToast();
 
     const hour = new Date().getHours();
@@ -24,9 +26,19 @@ export default function Dashboard() {
         isWindowOpen = true;
     }
 
-    const handleAttendance = async (e: React.FormEvent) => {
+    const handleAttendance = async (e: React.FormEvent, status: "present" | "absent" = "present") => {
         e.preventDefault();
         if (marked || !isWindowOpen) return;
+
+        if (status === "absent" && !absentMode) {
+            setAbsentMode(true);
+            return;
+        }
+
+        if (status === "absent" && absentMode && !absentReason.trim()) {
+            toast({ title: "Reason Required", description: "Please provide a reason for your absence.", variant: "destructive" });
+            return;
+        }
 
         const storedUser = localStorage.getItem("user");
         if (!storedUser) {
@@ -41,7 +53,7 @@ export default function Dashboard() {
             const res = await fetch("/api/attendance", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userId: user.userId })
+                body: JSON.stringify({ userId: user.userId, status, absentReason: status === "absent" ? absentReason : undefined })
             });
 
             if (!res.ok) {
@@ -105,32 +117,71 @@ export default function Dashboard() {
                     </div>
 
                     {/* Action */}
-                    <div className="space-y-5">
-                        <button
-                            onClick={handleAttendance}
-                            disabled={isLoading || marked || !isWindowOpen}
-                            className={`w-full relative overflow-hidden group rounded-xl font-display font-bold text-lg tracking-wide uppercase transition-all duration-300 transform active:scale-[0.98] ${marked ? 'disabled:opacity-100 disabled:cursor-default' : (!isWindowOpen ? 'disabled:opacity-50 disabled:cursor-not-allowed hidden' : 'disabled:opacity-70 disabled:cursor-not-allowed')}`}
-                        >
-                            {/* Button Background & Glow */}
-                            <div className={`absolute inset-0 transition-colors ${marked ? 'bg-green-500/80 glow-green' : 'bg-cyan-500/80 glow-cyan group-hover:bg-cyan-500'}`}></div>
+                    <div className="space-y-4">
+                        {!absentMode ? (
+                            <>
+                                <button
+                                    onClick={(e) => handleAttendance(e, "present")}
+                                    disabled={isLoading || marked || !isWindowOpen}
+                                    className={`w-full relative overflow-hidden group rounded-xl font-display font-bold text-lg tracking-wide uppercase transition-all duration-300 transform active:scale-[0.98] ${marked ? 'disabled:opacity-100 disabled:cursor-default' : (!isWindowOpen ? 'disabled:opacity-50 disabled:cursor-not-allowed hidden' : 'disabled:opacity-70 disabled:cursor-not-allowed')}`}
+                                >
+                                    {/* Button Background & Glow */}
+                                    <div className={`absolute inset-0 transition-colors ${marked ? 'bg-green-500/80 glow-green' : 'bg-cyan-500/80 glow-cyan group-hover:bg-cyan-500'}`}></div>
 
-                            {/* Content */}
-                            <div className="relative py-4 px-6 flex items-center justify-center gap-3 text-white">
-                                {isLoading ? (
-                                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                ) : marked ? (
-                                    <>
-                                        <CheckCircle className="w-5 h-5" />
-                                        <span>Attendance Recorded</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span>{buttonText}</span>
-                                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                    </>
+                                    {/* Content */}
+                                    <div className="relative py-4 px-6 flex items-center justify-center gap-3 text-white">
+                                        {isLoading ? (
+                                            <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        ) : marked ? (
+                                            <>
+                                                <CheckCircle className="w-5 h-5" />
+                                                <span>{message || "Attendance Recorded"}</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>{buttonText}</span>
+                                                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                            </>
+                                        )}
+                                    </div>
+                                </button>
+
+                                {!marked && isWindowOpen && (
+                                    <button
+                                        onClick={(e) => handleAttendance(e, "absent")}
+                                        disabled={isLoading}
+                                        className="w-full relative overflow-hidden group rounded-xl font-display font-bold text-sm tracking-wide uppercase transition-all duration-300 transform active:scale-[0.98] bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 hover:border-red-500 text-red-100 py-3 flex items-center justify-center"
+                                    >
+                                        Mark Absent
+                                    </button>
                                 )}
+                            </>
+                        ) : (
+                            <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col gap-3">
+                                <label className="text-sm font-display tracking-widest text-red-200">REASON FOR ABSENCE</label>
+                                <textarea
+                                    value={absentReason}
+                                    onChange={(e) => setAbsentReason(e.target.value)}
+                                    placeholder="Please provide a valid reason..."
+                                    className="w-full p-3 rounded-xl bg-white/5 border border-red-500/30 text-white placeholder:text-muted-foreground focus:outline-none focus:border-red-500 focus:glow-red resize-none min-h-[100px]"
+                                />
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setAbsentMode(false)}
+                                        className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-display uppercase tracking-wider text-sm transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={(e) => handleAttendance(e, "absent")}
+                                        disabled={isLoading}
+                                        className="flex-[2] py-3 rounded-xl bg-red-500 text-white font-display uppercase tracking-wider text-sm hover:bg-red-600 transition-colors glow-red"
+                                    >
+                                        {isLoading ? "Submitting..." : "Confirm Absence"}
+                                    </button>
+                                </div>
                             </div>
-                        </button>
+                        )}
                     </div>
 
                     {/* Time Display */}

@@ -33,6 +33,8 @@ export const attendance = pgTable("attendance", {
   date: text("date").notNull(), // YYYY-MM-DD
   mealType: text("meal_type").notNull(), // 'breakfast' | 'dinner'
   timestamp: text("timestamp").notNull(),
+  status: text("status").notNull().default("present"), // 'present' | 'absent'
+  absentReason: text("absent_reason"),
   verifiedByAdmin: boolean("verified_by_admin").default(false),
 });
 
@@ -51,6 +53,8 @@ export const insertAttendanceSchema = createInsertSchema(attendance).pick({
   date: true,
   mealType: true,
   timestamp: true,
+  status: true,
+  absentReason: true,
 });
 
 export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
