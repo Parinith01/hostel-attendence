@@ -159,7 +159,7 @@ export default function Dashboard() {
                             <UtensilsCrossed className="w-8 h-8" />
                         </div>
                         <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                            Hostel Hub
+                            JSS Hostel Hub
                         </h1>
                         <p className="font-display text-primary uppercase tracking-[0.2em] text-sm font-semibold text-glow">
                             Student Portal
@@ -182,7 +182,7 @@ export default function Dashboard() {
 
                             {messages.breakfast ? (
                                 <div className="bg-white/5 rounded-xl p-3 flex items-center justify-center gap-2 text-sm text-green-400">
-                                    <CheckCircle className="w-4 h-4" /> REASON LOGGED
+                                    <CheckCircle className="w-4 h-4" /> SESSION LOCKED
                                 </div>
                             ) : (
                                 <div className="flex gap-2">

@@ -18,7 +18,7 @@ export default function FirstPage() {
                 <div className="relative z-10 flex flex-col gap-8 text-center">
                     <div className="space-y-3">
                         <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-                            Welcome to Hostel Hub
+                            Welcome to JSS Hostel Hub
                         </h1>
                         <p className="text-muted-foreground font-medium uppercase tracking-widest text-sm">
                             Please select your portal

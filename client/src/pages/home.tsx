@@ -10,7 +10,7 @@ export default function Home() {
 
   const handleAttendance = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!studentId || password.length < 8) {
       toast({
         title: "Access Denied",
@@ -21,7 +21,7 @@ export default function Home() {
     }
 
     setIsLoading(true);
-    
+
     // Simulate API call
     setTimeout(() => {
       setIsLoading(false);
@@ -56,7 +56,7 @@ export default function Home() {
               <UtensilsCrossed className="w-8 h-8" />
             </div>
             <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
-              Hostel Hub
+              JSS Hostel Hub
             </h1>
             <p className="font-display text-primary uppercase tracking-[0.2em] text-sm font-semibold text-glow">
               Daily Check-in
@@ -106,7 +106,7 @@ export default function Home() {
             >
               {/* Button Background & Glow */}
               <div className="absolute inset-0 bg-primary/80 glow-magenta group-hover:bg-primary transition-colors"></div>
-              
+
               {/* Content */}
               <div className="relative py-4 px-6 flex items-center justify-center gap-3 text-white">
                 {isLoading ? (
