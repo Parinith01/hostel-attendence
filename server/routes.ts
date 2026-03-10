@@ -54,7 +54,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/attendance", async (req, res) => {
-    const { userId, status, absentReason } = req.body;
+    const { userId, status, absentReason, selectedMealType } = req.body;
     const user = await storage.getUserByUserId(userId);
     if (!user) return res.status(404).json({ message: "User not found." });
 
@@ -63,13 +63,27 @@ export async function registerRoutes(
 
     const s = await storage.getSettings();
 
-    let mealType = "";
+    let timeBoxedMeal = "";
     if (hourStr >= s.breakfastStart && hourStr <= s.breakfastEnd) {
-      mealType = "breakfast";
+      timeBoxedMeal = "breakfast";
     } else if (hourStr >= s.dinnerStart && hourStr <= s.dinnerEnd) {
-      mealType = "dinner";
-    } else {
-      return res.status(400).json({ message: `Outside attendance windows (Breakfast: ${s.breakfastStart}-${s.breakfastEnd} / Dinner: ${s.dinnerStart}-${s.dinnerEnd}).` });
+      timeBoxedMeal = "dinner";
+    }
+
+    let mealType = selectedMealType || timeBoxedMeal;
+
+    if (status === "present") {
+      if (!timeBoxedMeal) {
+        return res.status(400).json({ message: `Outside attendance windows (Breakfast: ${s.breakfastStart}-${s.breakfastEnd} / Dinner: ${s.dinnerStart}-${s.dinnerEnd}).` });
+      }
+      if (selectedMealType && selectedMealType !== timeBoxedMeal) {
+        return res.status(400).json({ message: `You can only mark present for the active meal window.` });
+      }
+      mealType = timeBoxedMeal;
+    } else if (status === "absent") {
+      if (!mealType) {
+        return res.status(400).json({ message: "Must select a meal type when marking absent." });
+      }
     }
 
     if (status === "absent" && !absentReason) {
