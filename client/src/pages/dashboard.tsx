@@ -23,14 +23,30 @@ export default function Dashboard() {
         fetch("/api/settings").then(res => res.json()).then(data => setSettings(data)).catch(err => console.error(err));
     }, []);
 
-    const hourStr = new Date().getHours().toString().padStart(2, '0') + ':' + new Date().getMinutes().toString().padStart(2, '0');
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const toMinutes = (t: string) => {
+        const [h, m] = t.split(':').map(Number);
+        return h * 60 + m;
+    };
+
+    const isInWindow = (start: string, end: string) => {
+        const s = toMinutes(start);
+        const e = toMinutes(end);
+        if (e < s) {
+            // crosses midnight (e.g. 17:00 → 00:30)
+            return currentMinutes >= s || currentMinutes <= e;
+        }
+        return currentMinutes >= s && currentMinutes <= e;
+    };
 
     let isBreakfastOpen = false;
     let isDinnerOpen = false;
 
     if (settings) {
-        if (hourStr >= settings.breakfastStart && hourStr <= settings.breakfastEnd) isBreakfastOpen = true;
-        if (hourStr >= settings.dinnerStart && hourStr <= settings.dinnerEnd) isDinnerOpen = true;
+        isBreakfastOpen = isInWindow(settings.breakfastStart, settings.breakfastEnd);
+        isDinnerOpen = isInWindow(settings.dinnerStart, settings.dinnerEnd);
     }
 
     const handleAttendance = async (mealType: "breakfast" | "dinner", status: "present" | "absent" = "present") => {
