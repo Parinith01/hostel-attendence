@@ -83,7 +83,9 @@ export class MemStorage implements IStorage {
   }
 
   async getAllStudents(): Promise<User[]> {
-    return Array.from(this.users.values()).filter(u => u.role === "student");
+    return Array.from(this.users.values())
+      .filter(u => u.role === "student")
+      .sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, { numeric: true }));
   }
 
   async markAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
@@ -161,7 +163,9 @@ export class DatabaseStorage implements IStorage {
 
   async getAllStudents(): Promise<User[]> {
     if (!db) return [];
-    return await db.select().from(users).where(eq(users.role, "student"));
+    // Fetch all and sort in memory for natural alphanumeric sorting (Drizzle's order by is strictly lexical)
+    const list = await db.select().from(users).where(eq(users.role, "student"));
+    return list.sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, { numeric: true }));
   }
 
   async markAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
