@@ -230,7 +230,7 @@ export default function AdminDashboard() {
     const dinnerPresent = attendances.filter(a => a.mealType === "dinner" && a.status === "present").length;
 
     return (
-        <div className="min-h-screen p-4 sm:p-8 relative">
+        <div className="min-h-screen p-3 sm:p-6 lg:p-8 relative">
             {/* Background Orbs */}
             <div className="bg-orb orb-1 fixed"></div>
             <div className="bg-orb orb-2 fixed"></div>
@@ -287,36 +287,38 @@ export default function AdminDashboard() {
             <div className="max-w-6xl mx-auto relative z-10 space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
 
                 {/* Header */}
-                <div className="glass-card p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-magenta-500/20 shadow-[0_0_30px_rgba(236,72,153,0.1)]">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-magenta-500/10 text-magenta-500 flex items-center justify-center shadow-[0_0_15px_rgba(236,72,153,0.4)] border border-magenta-500/20">
-                            <Users className="w-6 h-6" />
+                <div className="glass-card p-4 sm:p-6 rounded-2xl flex flex-col gap-4 border border-magenta-500/20 shadow-[0_0_30px_rgba(236,72,153,0.1)]">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-magenta-500/10 text-magenta-500 flex items-center justify-center shadow-[0_0_15px_rgba(236,72,153,0.4)] border border-magenta-500/20">
+                                <Users className="w-5 h-5 sm:w-6 sm:h-6" />
+                            </div>
+                            <div>
+                                <h1 className="font-display text-xl sm:text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-magenta-400 to-purple-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.5)]">
+                                    Admin Dashboard
+                                </h1>
+                                <p className="font-display text-magenta-400/80 uppercase tracking-widest text-xs font-semibold mt-0.5 flex gap-2 items-center">
+                                    <CalendarDays className="w-3 h-3" /> {date}
+                                </p>
+                            </div>
                         </div>
-                        <div>
-                            <h1 className="font-display text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-magenta-400 to-purple-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.5)]">
-                                Admin Dashboard
-                            </h1>
-                            <p className="font-display text-magenta-400/80 uppercase tracking-widest text-xs font-semibold mt-1 flex gap-2 items-center">
-                                <CalendarDays className="w-3 h-3" /> {date}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="flex gap-4">
-                        <button onClick={() => setShowStudentsModal(true)} className="px-5 py-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-sm font-display tracking-widest">
-                            <Eye className="w-4 h-4 mr-2" /> VIEW STUDENTS
-                        </button>
-                        <button onClick={() => downloadMealPDF('breakfast')} className="px-4 py-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-xs font-display tracking-widest">
-                            <Download className="w-4 h-4 mr-2 group-hover:-translate-y-1 transition-transform" /> BREAKFAST PDF
-                        </button>
-                        <button onClick={() => downloadMealPDF('dinner')} className="px-4 py-3 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/30 text-magenta-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] group text-xs font-display tracking-widest">
-                            <Download className="w-4 h-4 mr-2 group-hover:-translate-y-1 transition-transform" /> DINNER PDF
-                        </button>
-                        <Link href="/">
-                            <span className="p-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer text-red-400 hover:text-red-300 flex items-center justify-center group h-full shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                        <Link href="/" onClick={() => localStorage.removeItem('user')}>
+                            <span className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer text-red-400 hover:text-red-300 flex items-center justify-center group shadow-[0_0_10px_rgba(239,68,68,0.2)]">
                                 <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                             </span>
                         </Link>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                        <button onClick={() => setShowStudentsModal(true)} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-xs font-display tracking-widest">
+                            <Eye className="w-4 h-4 mr-1.5" /> VIEW STUDENTS
+                        </button>
+                        <button onClick={() => downloadMealPDF('breakfast')} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-xs font-display tracking-widest">
+                            <Download className="w-4 h-4 mr-1.5 group-hover:-translate-y-1 transition-transform" /> BREAKFAST PDF
+                        </button>
+                        <button onClick={() => downloadMealPDF('dinner')} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/30 text-magenta-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] group text-xs font-display tracking-widest">
+                            <Download className="w-4 h-4 mr-1.5 group-hover:-translate-y-1 transition-transform" /> DINNER PDF
+                        </button>
                     </div>
                 </div>
 
