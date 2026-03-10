@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -33,7 +33,18 @@ export const attendance = pgTable("attendance", {
   date: text("date").notNull(), // YYYY-MM-DD
   mealType: text("meal_type").notNull(), // 'breakfast' | 'dinner'
   timestamp: text("timestamp").notNull(),
+  verifiedByAdmin: boolean("verified_by_admin").default(false),
 });
+
+export const settings = pgTable("settings", {
+  id: text("id").primaryKey(), // will always be 'default'
+  breakfastStart: text("breakfast_start").notNull().default("06:00"),
+  breakfastEnd: text("breakfast_end").notNull().default("09:00"),
+  dinnerStart: text("dinner_start").notNull().default("18:00"),
+  dinnerEnd: text("dinner_end").notNull().default("22:00"),
+});
+
+export type Settings = typeof settings.$inferSelect;
 
 export const insertAttendanceSchema = createInsertSchema(attendance).pick({
   userId: true,

@@ -1,4 +1,4 @@
-import { users, attendance, type User, type InsertUser, type Attendance, type InsertAttendance } from "@shared/schema";
+import { users, attendance, settings, type User, type InsertUser, type Attendance, type InsertAttendance, type Settings } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
@@ -14,15 +14,20 @@ export interface IStorage {
   markAttendance(attendance: InsertAttendance): Promise<Attendance>;
   getAttendanceByDate(date: string): Promise<Attendance[]>;
   getAttendanceByUserAndDate(userId: string, date: string, mealType: string): Promise<Attendance | undefined>;
+  getSettings(): Promise<Settings>;
+  updateSettings(settings: Partial<Settings>): Promise<Settings>;
+  verifyAttendance(id: string, verified: boolean): Promise<Attendance | undefined>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private attendances: Map<string, Attendance>;
+  private settingsConfig: Settings;
 
   constructor() {
     this.users = new Map();
     this.attendances = new Map();
+    this.settingsConfig = { id: 'default', breakfastStart: '06:00', breakfastEnd: '09:00', dinnerStart: '18:00', dinnerEnd: '22:00' };
 
     // Seed an admin user
     this.createUser({
@@ -83,7 +88,7 @@ export class MemStorage implements IStorage {
 
   async markAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
     const id = randomUUID();
-    const att: Attendance = { ...insertAttendance, id };
+    const att: Attendance = { ...insertAttendance, id, verifiedByAdmin: false };
     this.attendances.set(id, att);
     return att;
   }
@@ -94,6 +99,23 @@ export class MemStorage implements IStorage {
 
   async getAttendanceByUserAndDate(userId: string, date: string, mealType: string): Promise<Attendance | undefined> {
     return Array.from(this.attendances.values()).find(a => a.userId === userId && a.date === date && a.mealType === mealType);
+  }
+
+  async getSettings(): Promise<Settings> {
+    return this.settingsConfig;
+  }
+
+  async updateSettings(updateData: Partial<Settings>): Promise<Settings> {
+    this.settingsConfig = { ...this.settingsConfig, ...updateData };
+    return this.settingsConfig;
+  }
+
+  async verifyAttendance(id: string, verified: boolean): Promise<Attendance | undefined> {
+    const att = this.attendances.get(id);
+    if (!att) return undefined;
+    att.verifiedByAdmin = verified;
+    this.attendances.set(id, att);
+    return att;
   }
 }
 
@@ -154,6 +176,29 @@ export class DatabaseStorage implements IStorage {
           eq(attendance.mealType, mealType)
         )
       );
+    return att;
+  }
+
+  async getSettings(): Promise<Settings> {
+    if (!db) return { id: 'default', breakfastStart: '06:00', breakfastEnd: '09:00', dinnerStart: '18:00', dinnerEnd: '22:00' };
+    const [setting] = await db.select().from(settings).where(eq(settings.id, 'default'));
+    if (!setting) {
+      const [newSetting] = await db.insert(settings).values({ id: 'default' }).returning();
+      return newSetting;
+    }
+    return setting;
+  }
+
+  async updateSettings(updateData: Partial<Settings>): Promise<Settings> {
+    if (!db) throw new Error("DB not connected");
+    await this.getSettings(); // ensure it exists
+    const [updated] = await db.update(settings).set(updateData).where(eq(settings.id, 'default')).returning();
+    return updated;
+  }
+
+  async verifyAttendance(id: string, verified: boolean): Promise<Attendance | undefined> {
+    if (!db) return undefined;
+    const [att] = await db.update(attendance).set({ verifiedByAdmin: verified }).where(eq(attendance.id, id)).returning();
     return att;
   }
 }

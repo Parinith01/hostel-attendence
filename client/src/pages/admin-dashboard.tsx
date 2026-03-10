@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Clock } from "lucide-react";
+import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Clock, Download, Settings as SettingsIcon, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 type Student = {
     id: string;
@@ -18,6 +20,7 @@ type Attendance = {
     date: string;
     mealType: string;
     timestamp: string;
+    verifiedByAdmin: boolean;
 };
 
 type DashboardData = {
@@ -26,16 +29,32 @@ type DashboardData = {
     attendances: Attendance[];
 };
 
+type SettingsData = {
+    breakfastStart: string;
+    breakfastEnd: string;
+    dinnerStart: string;
+    dinnerEnd: string;
+};
+
 export default function AdminDashboard() {
     const [data, setData] = useState<DashboardData | null>(null);
+    const [settings, setSettings] = useState<SettingsData>({ breakfastStart: '06:00', breakfastEnd: '09:00', dinnerStart: '18:00', dinnerEnd: '22:00' });
     const [loading, setLoading] = useState(true);
+    const [savingSettings, setSavingSettings] = useState(false);
     const { toast } = useToast();
 
     const fetchDashboard = async () => {
         try {
-            const res = await fetch("/api/admin/dashboard");
-            const json = await res.json();
-            setData(json);
+            const [dashRes, setRes] = await Promise.all([
+                fetch("/api/admin/dashboard"),
+                fetch("/api/settings")
+            ]);
+
+            const dashJson = await dashRes.json();
+            const setJson = await setRes.json();
+
+            setData(dashJson);
+            setSettings(setJson);
         } catch (e) {
             toast({
                 title: "Error fetching data",
@@ -51,11 +70,101 @@ export default function AdminDashboard() {
         fetchDashboard();
     }, []);
 
+    const handleSaveSettings = async () => {
+        setSavingSettings(true);
+        try {
+            const res = await fetch("/api/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(settings)
+            });
+            if (res.ok) {
+                toast({
+                    title: "Settings Saved",
+                    description: "Time slots successfully updated.",
+                    className: "bg-green-500 text-white border-green-400 glow-cyan",
+                });
+            } else {
+                throw new Error("Failed");
+            }
+        } catch (e) {
+            toast({
+                title: "Error",
+                description: "Failed to save settings.",
+                variant: "destructive"
+            });
+        } finally {
+            setSavingSettings(false);
+        }
+    };
+
+    const handleVerifyParams = async (id: string, currentlyVerified: boolean) => {
+        try {
+            const res = await fetch("/api/admin/verify-attendance", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id, verifiedByAdmin: !currentlyVerified })
+            });
+            if (res.ok) {
+                // Instantly update UI optimistically
+                setData(prev => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        attendances: prev.attendances.map(a => a.id === id ? { ...a, verifiedByAdmin: !currentlyVerified } : a)
+                    };
+                });
+                toast({
+                    title: !currentlyVerified ? "Attendance Verified" : "Verification Removed",
+                    className: "bg-primary text-primary-foreground border-primary glow-magenta",
+                });
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const downloadStudentsPDF = () => {
+        const doc = new jsPDF();
+        doc.text("Registered Students Roster", 14, 15);
+        autoTable(doc, {
+            head: [['Full Name', 'User ID', 'Phone Number', 'Room', 'Block']],
+            body: data?.students.map(s => [s.fullName, s.userId, s.phoneNumber, s.roomNumber, s.hostelBlock]) || [],
+            startY: 20,
+            theme: 'grid',
+            headStyles: { fillColor: [236, 72, 153] }
+        });
+        doc.save("Registered_Students.pdf");
+    };
+
+    const downloadAttendancePDF = () => {
+        if (!data) return;
+        const doc = new jsPDF();
+        doc.text(`Hostel Attendance Report - ${data.date}`, 14, 15);
+        autoTable(doc, {
+            head: [['Student Name', 'Room No', 'Breakfast', 'Dinner']],
+            body: data.students.map(student => {
+                const b = data.attendances.find(a => a.userId === student.userId && a.mealType === 'breakfast');
+                const d = data.attendances.find(a => a.userId === student.userId && a.mealType === 'dinner');
+                return [
+                    student.fullName,
+                    student.roomNumber,
+                    b ? (b.verifiedByAdmin ? 'Present (Verified)' : 'Present (Unverified)') : 'Absent',
+                    d ? (d.verifiedByAdmin ? 'Present (Verified)' : 'Present (Unverified)') : 'Absent'
+                ];
+            }),
+            startY: 20,
+            theme: 'grid',
+            headStyles: { fillColor: [6, 182, 212] }
+        });
+        doc.save(`Attendance_${data.date}.pdf`);
+    };
+
     const sendWarning = (student: Student) => {
         toast({
             title: "Warning Sent",
             description: `Disciplinary warning has been sent to ${student.fullName} (${student.userId}).`,
-            className: "bg-primary text-primary-foreground border-primary glow-magenta",
+            variant: "destructive",
         });
     };
 
@@ -100,51 +209,78 @@ export default function AdminDashboard() {
                         </div>
                     </div>
 
-                    <Link href="/">
-                        <span className="p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer text-muted-foreground hover:text-white flex items-center justify-center border border-white/5 group">
-                            <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                            <span className="ml-2 font-display text-sm tracking-widest">EXIT</span>
-                        </span>
-                    </Link>
+                    <div className="flex gap-4">
+                        <button onClick={downloadStudentsPDF} className="p-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 hover:text-white flex items-center justify-center transition-colors group text-sm font-display tracking-widest">
+                            <Download className="w-4 h-4 mr-2" /> STUDENTS PDF
+                        </button>
+                        <button onClick={downloadAttendancePDF} className="p-3 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/20 text-magenta-400 hover:text-white flex items-center justify-center transition-colors group text-sm font-display tracking-widest">
+                            <Download className="w-4 h-4 mr-2" /> ATTENDANCE PDF
+                        </button>
+                        <Link href="/">
+                            <span className="p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer text-muted-foreground hover:text-white flex items-center justify-center border border-white/5 group h-full">
+                                <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                            </span>
+                        </Link>
+                    </div>
+                </div>
+
+                {/* Settings Editor */}
+                <div className="glass-card p-6 rounded-2xl border border-white/10 gap-2">
+                    <h2 className="font-display tracking-widest text-lg font-semibold text-white mb-4 flex items-center gap-2"><SettingsIcon className="w-5 h-5 text-cyan-400" /> TIME SLOT CONFIGURATION</h2>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                            <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">BREAKFAST START</label>
+                            <input type="time" value={settings.breakfastStart} onChange={(e) => setSettings({ ...settings, breakfastStart: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
+                        </div>
+                        <div>
+                            <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">BREAKFAST END</label>
+                            <input type="time" value={settings.breakfastEnd} onChange={(e) => setSettings({ ...settings, breakfastEnd: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
+                        </div>
+                        <div>
+                            <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">DINNER START</label>
+                            <input type="time" value={settings.dinnerStart} onChange={(e) => setSettings({ ...settings, dinnerStart: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
+                        </div>
+                        <div>
+                            <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">DINNER END</label>
+                            <input type="time" value={settings.dinnerEnd} onChange={(e) => setSettings({ ...settings, dinnerEnd: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
+                        </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                        <button onClick={handleSaveSettings} disabled={savingSettings} className="px-6 py-3 rounded-xl bg-cyan-500 text-white font-bold tracking-wider hover:bg-cyan-400 transition-colors flex items-center gap-2 text-sm">
+                            {savingSettings ? "SAVING..." : <><Save className="w-4 h-4" /> SAVE TIME SLOTS</>}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2">
-                        <span className="text-muted-foreground font-display tracking-widest text-sm">TOTAL STUDENTS</span>
-                        <span className="text-4xl font-bold text-white mb-1">{totalStudents}</span>
-                        <div className="h-1 w-full bg-secondary/20 rounded-full overflow-hidden">
-                            <div className="h-full bg-secondary/80 w-full glow-cyan"></div>
-                        </div>
-                    </div>
-
-                    <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2">
-                        <span className="text-muted-foreground font-display tracking-widest text-sm">BREAKFAST ATTENDANCE</span>
-                        <span className="text-4xl font-bold text-white flex items-baseline gap-2 mb-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2 relative overflow-hidden group">
+                        <span className="text-muted-foreground font-display tracking-widest text-sm relative z-10">BREAKFAST ATTENDANCE</span>
+                        <span className="text-4xl font-bold text-white flex items-baseline gap-2 mb-1 relative z-10">
                             {breakfastPresent} <span className="text-base text-muted-foreground font-normal">/ {totalStudents}</span>
                         </span>
-                        <div className="flex justify-between text-xs text-muted-foreground pb-1">
-                            <span className="text-green-400">{breakfastPresent} Present</span>
-                            <span className="text-red-400">{totalStudents - breakfastPresent} Absent</span>
+                        <div className="absolute top-0 right-0 -mr-6 -mt-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <Users className="w-32 h-32" />
                         </div>
                     </div>
 
-                    <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2">
-                        <span className="text-muted-foreground font-display tracking-widest text-sm">DINNER ATTENDANCE</span>
-                        <span className="text-4xl font-bold text-white flex items-baseline gap-2 mb-1">
+                    <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2 relative overflow-hidden group">
+                        <span className="text-muted-foreground font-display tracking-widest text-sm relative z-10">DINNER ATTENDANCE</span>
+                        <span className="text-4xl font-bold text-white flex items-baseline gap-2 mb-1 relative z-10">
                             {dinnerPresent} <span className="text-base text-muted-foreground font-normal">/ {totalStudents}</span>
                         </span>
-                        <div className="flex justify-between text-xs text-muted-foreground pb-1">
-                            <span className="text-green-400">{dinnerPresent} Present</span>
-                            <span className="text-red-400">{totalStudents - dinnerPresent} Absent</span>
+                        <div className="absolute top-0 right-0 -mr-6 -mt-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <Users className="w-32 h-32" />
                         </div>
                     </div>
                 </div>
 
                 {/* Student List */}
                 <div className="glass-card rounded-2xl border border-white/10 overflow-hidden">
-                    <div className="p-6 border-b border-white/5 bg-white/5">
-                        <h2 className="font-display tracking-widest text-lg font-semibold text-white">STUDENT ROSTER</h2>
+                    <div className="p-6 border-b border-white/5 bg-white/5 flex justify-between items-center">
+                        <h2 className="font-display tracking-widest text-lg font-semibold text-white">STUDENT VERIFICATION ROSTER</h2>
                     </div>
 
                     <div className="overflow-x-auto">
@@ -153,8 +289,8 @@ export default function AdminDashboard() {
                                 <tr className="border-b border-white/5 text-muted-foreground/80 text-sm font-display tracking-wider">
                                     <th className="p-4 font-normal">Student Info</th>
                                     <th className="p-4 font-normal">Room/Block</th>
-                                    <th className="p-4 font-normal text-center">Breakfast Status</th>
-                                    <th className="p-4 font-normal text-center">Dinner Status</th>
+                                    <th className="p-4 font-normal text-center">Breakfast Status (Click to Verify)</th>
+                                    <th className="p-4 font-normal text-center">Dinner Status (Click to Verify)</th>
                                     <th className="p-4 font-normal text-right">Action</th>
                                 </tr>
                             </thead>
@@ -176,24 +312,26 @@ export default function AdminDashboard() {
                                             </td>
                                             <td className="p-4 text-center">
                                                 {breakfastMark ? (
-                                                    <div className="inline-flex flex-col items-center gap-1">
-                                                        <CheckCircle className="w-5 h-5 text-green-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
-                                                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                                            <Clock className="w-3 h-3" /> {new Date(breakfastMark.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    <button onClick={() => handleVerifyParams(breakfastMark.id, !!breakfastMark.verifiedByAdmin)} className={`inline-flex flex-col items-center gap-1 p-2 rounded-xl border transition-all cursor-pointer ${breakfastMark.verifiedByAdmin ? 'bg-green-500/20 border-green-500/50 glow-cyan' : 'bg-white/5 border-white/10 hover:border-cyan-400/50'}`}>
+                                                        <CheckCircle className={`w-5 h-5 ${breakfastMark.verifiedByAdmin ? 'text-green-400' : 'text-cyan-400 glow-cyan'}`} />
+                                                        <span className={`text-[10px] flex items-center gap-1 ${breakfastMark.verifiedByAdmin ? 'text-green-400 font-bold' : 'text-muted-foreground'}`}>
+                                                            {breakfastMark.verifiedByAdmin ? 'VERIFIED' : 'PENDING'}
                                                         </span>
-                                                    </div>
+                                                        <span className="text-[10px] text-muted-foreground/50">{new Date(breakfastMark.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    </button>
                                                 ) : (
                                                     <XCircle className="w-5 h-5 text-red-500/50 mx-auto" />
                                                 )}
                                             </td>
                                             <td className="p-4 text-center">
                                                 {dinnerMark ? (
-                                                    <div className="inline-flex flex-col items-center gap-1">
-                                                        <CheckCircle className="w-5 h-5 text-green-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
-                                                        <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                                            <Clock className="w-3 h-3" /> {new Date(dinnerMark.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    <button onClick={() => handleVerifyParams(dinnerMark.id, !!dinnerMark.verifiedByAdmin)} className={`inline-flex flex-col items-center gap-1 p-2 rounded-xl border transition-all cursor-pointer ${dinnerMark.verifiedByAdmin ? 'bg-green-500/20 border-green-500/50 glow-cyan' : 'bg-white/5 border-white/10 hover:border-cyan-400/50'}`}>
+                                                        <CheckCircle className={`w-5 h-5 ${dinnerMark.verifiedByAdmin ? 'text-green-400' : 'text-cyan-400 glow-cyan'}`} />
+                                                        <span className={`text-[10px] flex items-center gap-1 ${dinnerMark.verifiedByAdmin ? 'text-green-400 font-bold' : 'text-muted-foreground'}`}>
+                                                            {dinnerMark.verifiedByAdmin ? 'VERIFIED' : 'PENDING'}
                                                         </span>
-                                                    </div>
+                                                        <span className="text-[10px] text-muted-foreground/50">{new Date(dinnerMark.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    </button>
                                                 ) : (
                                                     <XCircle className="w-5 h-5 text-red-500/50 mx-auto" />
                                                 )}

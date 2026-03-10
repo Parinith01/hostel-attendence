@@ -7,6 +7,27 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  app.get("/api/settings", async (req, res) => {
+    const s = await storage.getSettings();
+    res.json(s);
+  });
+
+  app.post("/api/settings", async (req, res) => {
+    try {
+      const s = await storage.updateSettings(req.body);
+      res.json(s);
+    } catch {
+      res.status(500).json({ message: "Failed to update settings." });
+    }
+  });
+
+  app.post("/api/admin/verify-attendance", async (req, res) => {
+    const { id, verifiedByAdmin } = req.body;
+    const att = await storage.verifyAttendance(id, verifiedByAdmin);
+    if (!att) return res.status(404).json({ message: "Attendance not found" });
+    res.json(att);
+  });
+
   app.post("/api/register", async (req, res) => {
     try {
       const existingUser = await storage.getUserByUserId(req.body.userId);
@@ -38,15 +59,17 @@ export async function registerRoutes(
     if (!user) return res.status(404).json({ message: "User not found." });
 
     const now = new Date();
-    const hour = now.getHours();
+    const hourStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+    const s = await storage.getSettings();
 
     let mealType = "";
-    if (hour >= 6 && hour < 9) {
+    if (hourStr >= s.breakfastStart && hourStr <= s.breakfastEnd) {
       mealType = "breakfast";
-    } else if (hour >= 18 && hour < 22) {
+    } else if (hourStr >= s.dinnerStart && hourStr <= s.dinnerEnd) {
       mealType = "dinner";
     } else {
-      return res.status(400).json({ message: "Outside attendance windows (6AM-9AM / 6PM-10PM)." });
+      return res.status(400).json({ message: `Outside attendance windows (Breakfast: ${s.breakfastStart}-${s.breakfastEnd} / Dinner: ${s.dinnerStart}-${s.dinnerEnd}).` });
     }
 
     const dateStr = now.toISOString().split('T')[0];
