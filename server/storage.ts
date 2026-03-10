@@ -88,7 +88,16 @@ export class MemStorage implements IStorage {
 
   async markAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
     const id = randomUUID();
-    const att: Attendance = { ...insertAttendance, id, verifiedByAdmin: false };
+    const att: Attendance = {
+      id,
+      userId: insertAttendance.userId,
+      date: insertAttendance.date,
+      mealType: insertAttendance.mealType,
+      timestamp: insertAttendance.timestamp,
+      status: insertAttendance.status ?? 'present',
+      absentReason: insertAttendance.absentReason ?? null,
+      verifiedByAdmin: false,
+    };
     this.attendances.set(id, att);
     return att;
   }
