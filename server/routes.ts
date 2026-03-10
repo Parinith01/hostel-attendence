@@ -40,6 +40,13 @@ export async function registerRoutes(
     res.json(att);
   });
 
+  app.delete("/api/admin/students/:id", async (req, res) => {
+    const { id } = req.params;
+    const deleted = await storage.deleteUser(id);
+    if (!deleted) return res.status(404).json({ message: "Student not found." });
+    res.json({ message: "Student removed successfully." });
+  });
+
   app.post("/api/register", async (req, res) => {
     try {
       const existingUser = await storage.getUserByUserId(req.body.userId);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Clock, Download, Settings as SettingsIcon, Save, Eye, X } from "lucide-react";
+import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Clock, Download, Settings as SettingsIcon, Save, Eye, X, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -44,6 +44,7 @@ export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
     const [savingSettings, setSavingSettings] = useState(false);
     const [showStudentsModal, setShowStudentsModal] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
     const { toast } = useToast();
 
     const fetchDashboard = async () => {
@@ -67,6 +68,24 @@ export default function AdminDashboard() {
             });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDeleteStudent = async (student: Student) => {
+        if (!confirm(`Remove "${student.fullName}" (${student.userId}) from the system? This cannot be undone.`)) return;
+        setDeletingId(student.id);
+        try {
+            const res = await fetch(`/api/admin/students/${student.id}`, { method: 'DELETE' });
+            if (res.ok) {
+                setData(prev => prev ? { ...prev, students: prev.students.filter(s => s.id !== student.id) } : prev);
+                toast({ title: 'Student Removed', description: `${student.fullName} has been removed.`, className: 'bg-red-900/80 text-red-100 border-red-700' });
+            } else {
+                throw new Error('Failed to delete');
+            }
+        } catch {
+            toast({ title: 'Error', description: 'Could not remove student.', variant: 'destructive' });
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -257,19 +276,29 @@ export default function AdminDashboard() {
                                         <th className="p-4 font-normal">Full Name</th>
                                         <th className="p-4 font-normal">User ID</th>
                                         <th className="p-4 font-normal">Phone Number</th>
-                                        <th className="p-4 font-normal">Room Number</th>
-                                        <th className="p-4 font-normal">Hostel Block</th>
+                                        <th className="p-4 font-normal">Room</th>
+                                        <th className="p-4 font-normal">Block</th>
+                                        <th className="p-4 font-normal text-center">Remove</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
                                     {students.map((s, index) => (
                                         <tr key={s.id} className="hover:bg-white/5 transition-colors">
                                             <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
-                                            <td className="p-4 text-white font-medium">{s.fullName}</td>
-                                            <td className="p-4 text-cyan-400">{s.userId}</td>
-                                            <td className="p-4 text-white/80">{s.phoneNumber}</td>
+                                            <td className="p-4 text-white font-medium whitespace-nowrap">{s.fullName}</td>
+                                            <td className="p-4 text-cyan-400 whitespace-nowrap">{s.userId}</td>
+                                            <td className="p-4 text-white/80 whitespace-nowrap">{s.phoneNumber}</td>
                                             <td className="p-4 text-magenta-300 font-medium">{s.roomNumber}</td>
                                             <td className="p-4 text-white/80">{s.hostelBlock}</td>
+                                            <td className="p-4 text-center">
+                                                <button
+                                                    onClick={() => handleDeleteStudent(s)}
+                                                    disabled={deletingId === s.id}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-500/60 transition-all text-xs font-display tracking-widest font-semibold disabled:opacity-50"
+                                                >
+                                                    {deletingId === s.id ? '...' : <><Trash2 className="w-3 h-3" /> REMOVE</>}
+                                                </button>
+                                            </td>
                                         </tr>
                                     ))}
                                     {students.length === 0 && (
