@@ -127,56 +127,43 @@ export default function AdminDashboard() {
         }
     };
 
-    const downloadAttendancePDF = () => {
+    const downloadMealPDF = (mealType: 'breakfast' | 'dinner') => {
         if (!data) return;
         const doc = new jsPDF();
-        doc.text(`Hostel Attendance Report - ${data.date}`, 14, 15);
+        const mealName = mealType === 'breakfast' ? 'Breakfast' : 'Dinner';
+        doc.text(`Hostel ${mealName} Attendance Report - ${data.date}`, 14, 15);
 
-        const getRowData = (mealType: string) => {
-            return data.students.map(student => {
-                const mark = data.attendances.find(a => a.userId === student.userId && a.mealType === mealType);
-                let text = "Not Voted";
-                let style = { fillColor: [239, 68, 68], textColor: [255, 255, 255] }; // red
+        const rowData = data.students.map(student => {
+            const mark = data.attendances.find(a => a.userId === student.userId && a.mealType === mealType);
+            let text = "Not Voted";
+            let style = { fillColor: [239, 68, 68], textColor: [255, 255, 255] };
 
-                if (mark) {
-                    if (mark.status === "absent") {
-                        text = `Absent - Reason: ${mark.absentReason}`;
-                        style = { fillColor: [234, 179, 8], textColor: [0, 0, 0] }; // yellow with black text
-                    } else {
-                        text = mark.verifiedByAdmin ? 'Present (Verified)' : 'Present (Pending)';
-                        style = { fillColor: [34, 197, 94], textColor: [255, 255, 255] }; // green
-                    }
+            if (mark) {
+                if (mark.status === "absent") {
+                    text = `Absent - Reason: ${mark.absentReason}`;
+                    style = { fillColor: [234, 179, 8], textColor: [0, 0, 0] };
+                } else {
+                    text = mark.verifiedByAdmin ? 'Present (Verified)' : 'Present (Pending)';
+                    style = { fillColor: [34, 197, 94], textColor: [255, 255, 255] };
                 }
+            }
 
-                return [
-                    student.fullName,
-                    student.roomNumber,
-                    { content: text, styles: style }
-                ];
-            });
-        };
-
-        doc.text("Breakfast Attendance", 14, 25);
-        autoTable(doc, {
-            head: [['Student Name', 'Room No', 'Status']],
-            body: getRowData('breakfast'),
-            startY: 30,
-            theme: 'grid',
-            headStyles: { fillColor: [6, 182, 212] }
+            return [
+                student.fullName,
+                student.roomNumber,
+                { content: text, styles: style }
+            ];
         });
 
-        const finalY = (doc as any).lastAutoTable.finalY || 30;
-
-        doc.text("Dinner Attendance", 14, finalY + 15);
         autoTable(doc, {
             head: [['Student Name', 'Room No', 'Status']],
-            body: getRowData('dinner'),
-            startY: finalY + 20,
+            body: rowData,
+            startY: 25,
             theme: 'grid',
-            headStyles: { fillColor: [236, 72, 153] }
+            headStyles: { fillColor: mealType === 'breakfast' ? [6, 182, 212] : [236, 72, 153] }
         });
 
-        doc.save(`Attendance_${data.date}.pdf`);
+        doc.save(`${mealName}_Attendance_${data.date}.pdf`);
     };
 
     const sendWarning = (student: Student) => {
@@ -316,8 +303,11 @@ export default function AdminDashboard() {
                         <button onClick={() => setShowStudentsModal(true)} className="px-5 py-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-sm font-display tracking-widest">
                             <Eye className="w-4 h-4 mr-2" /> VIEW STUDENTS
                         </button>
-                        <button onClick={downloadAttendancePDF} className="px-5 py-3 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/30 text-magenta-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] group text-sm font-display tracking-widest">
-                            <Download className="w-4 h-4 mr-2 group-hover:-translate-y-1 transition-transform" /> ATTENDANCE PDF
+                        <button onClick={() => downloadMealPDF('breakfast')} className="px-4 py-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-xs font-display tracking-widest">
+                            <Download className="w-4 h-4 mr-2 group-hover:-translate-y-1 transition-transform" /> BREAKFAST PDF
+                        </button>
+                        <button onClick={() => downloadMealPDF('dinner')} className="px-4 py-3 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/30 text-magenta-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] group text-xs font-display tracking-widest">
+                            <Download className="w-4 h-4 mr-2 group-hover:-translate-y-1 transition-transform" /> DINNER PDF
                         </button>
                         <Link href="/">
                             <span className="p-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer text-red-400 hover:text-red-300 flex items-center justify-center group h-full shadow-[0_0_10px_rgba(239,68,68,0.2)]">
