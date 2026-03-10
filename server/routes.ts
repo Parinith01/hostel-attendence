@@ -45,7 +45,6 @@ export async function registerRoutes(
     const { userId, password, role } = req.body;
     const user = await storage.getUserByUserId(userId);
 
-    // Strict mock checking:
     if (!user || user.password !== password || user.role !== role) {
       return res.status(401).json({ message: "Invalid credentials or portal selection." });
     }
@@ -58,15 +57,21 @@ export async function registerRoutes(
     const user = await storage.getUserByUserId(userId);
     if (!user) return res.status(404).json({ message: "User not found." });
 
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    // Always use IST since admins configure time slots in Indian time
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
+    const dateStr = nowIST.getFullYear() + '-' +
+      String(nowIST.getMonth() + 1).padStart(2, '0') + '-' +
+      String(nowIST.getDate()).padStart(2, '0');
 
     const s = await storage.getSettings();
 
     const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
     const inWindow = (start: string, end: string) => {
       const s2 = toMin(start), e2 = toMin(end);
-      return e2 < s2 ? (currentMinutes >= s2 || currentMinutes <= e2) : (currentMinutes >= s2 && currentMinutes <= e2);
+      return e2 < s2
+        ? (currentMinutes >= s2 || currentMinutes <= e2)  // crosses midnight
+        : (currentMinutes >= s2 && currentMinutes <= e2);
     };
 
     let timeBoxedMeal = "";
@@ -96,7 +101,6 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Must provide a reason when marking absent." });
     }
 
-    const dateStr = now.toISOString().split('T')[0];
     const existing = await storage.getAttendanceByUserAndDate(userId, dateStr, mealType);
     if (existing) {
       return res.status(400).json({ message: `Already marked attendance for ${mealType} today.` });
@@ -106,7 +110,7 @@ export async function registerRoutes(
       userId,
       date: dateStr,
       mealType,
-      timestamp: now.toISOString(),
+      timestamp: new Date().toISOString(),
       status: status || "present",
       absentReason: absentReason || null
     });
@@ -119,8 +123,13 @@ export async function registerRoutes(
 
   app.get("/api/admin/dashboard", async (req, res) => {
     const students = await storage.getAllStudents();
-    const now = new Date();
-    const dateStr = req.query.date ? String(req.query.date) : now.toISOString().split('T')[0];
+    // Use IST date for admin dashboard too
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const dateStr = req.query.date
+      ? String(req.query.date)
+      : nowIST.getFullYear() + '-' +
+      String(nowIST.getMonth() + 1).padStart(2, '0') + '-' +
+      String(nowIST.getDate()).padStart(2, '0');
     const todayAttendance = await storage.getAttendanceByDate(dateStr);
 
     res.json({
