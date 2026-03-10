@@ -85,7 +85,11 @@ export class MemStorage implements IStorage {
   async getAllStudents(): Promise<User[]> {
     return Array.from(this.users.values())
       .filter(u => u.role === "student")
-      .sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, { numeric: true }));
+      .sort((a, b) => {
+        const roomCompare = (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, { numeric: true });
+        if (roomCompare !== 0) return roomCompare;
+        return (a.fullName || "").localeCompare(b.fullName || "");
+      });
   }
 
   async markAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
@@ -165,7 +169,11 @@ export class DatabaseStorage implements IStorage {
     if (!db) return [];
     // Fetch all and sort in memory for natural alphanumeric sorting (Drizzle's order by is strictly lexical)
     const list = await db.select().from(users).where(eq(users.role, "student"));
-    return list.sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, { numeric: true }));
+    return list.sort((a, b) => {
+      const roomCompare = (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, { numeric: true });
+      if (roomCompare !== 0) return roomCompare;
+      return (a.fullName || "").localeCompare(b.fullName || "");
+    });
   }
 
   async markAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
