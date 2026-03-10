@@ -133,22 +133,23 @@ export default function AdminDashboard() {
         const mealName = mealType === 'breakfast' ? 'Breakfast' : 'Dinner';
         doc.text(`Hostel ${mealName} Attendance Report - ${data.date}`, 14, 15);
 
-        const rowData = data.students.map(student => {
+        const rowData = data.students.map((student, index) => {
             const mark = data.attendances.find(a => a.userId === student.userId && a.mealType === mealType);
             let text = "Not Voted";
-            let style = { fillColor: [239, 68, 68], textColor: [255, 255, 255] };
+            let style = { fillColor: [239, 68, 68] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] };
 
             if (mark) {
                 if (mark.status === "absent") {
                     text = `Absent - Reason: ${mark.absentReason}`;
-                    style = { fillColor: [234, 179, 8], textColor: [0, 0, 0] };
+                    style = { fillColor: [234, 179, 8] as [number, number, number], textColor: [0, 0, 0] as [number, number, number] };
                 } else {
                     text = mark.verifiedByAdmin ? 'Present (Verified)' : 'Present (Pending)';
-                    style = { fillColor: [34, 197, 94], textColor: [255, 255, 255] };
+                    style = { fillColor: [34, 197, 94] as [number, number, number], textColor: [255, 255, 255] as [number, number, number] };
                 }
             }
 
             return [
+                index + 1,
                 student.fullName,
                 student.roomNumber,
                 { content: text, styles: style }
@@ -156,7 +157,7 @@ export default function AdminDashboard() {
         });
 
         autoTable(doc, {
-            head: [['Student Name', 'Room No', 'Status']],
+            head: [['S.No', 'Student Name', 'Room No', 'Status']],
             body: rowData,
             startY: 25,
             theme: 'grid',
@@ -252,6 +253,7 @@ export default function AdminDashboard() {
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-white/5 sticky top-0 backdrop-blur-md">
                                     <tr className="border-b border-white/10 text-muted-foreground/80 text-sm font-display tracking-wider">
+                                        <th className="p-4 font-normal w-12 text-center">#</th>
                                         <th className="p-4 font-normal">Full Name</th>
                                         <th className="p-4 font-normal">User ID</th>
                                         <th className="p-4 font-normal">Phone Number</th>
@@ -260,8 +262,9 @@ export default function AdminDashboard() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {students.map((s) => (
+                                    {students.map((s, index) => (
                                         <tr key={s.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
                                             <td className="p-4 text-white font-medium">{s.fullName}</td>
                                             <td className="p-4 text-cyan-400">{s.userId}</td>
                                             <td className="p-4 text-white/80">{s.phoneNumber}</td>
@@ -271,7 +274,7 @@ export default function AdminDashboard() {
                                     ))}
                                     {students.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} className="p-8 text-center text-muted-foreground">No students registered yet.</td>
+                                            <td colSpan={6} className="p-8 text-center text-muted-foreground">No students registered yet.</td>
                                         </tr>
                                     )}
                                 </tbody>
@@ -382,6 +385,7 @@ export default function AdminDashboard() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-white/5 text-muted-foreground/80 text-sm font-display tracking-wider">
+                                    <th className="p-4 font-normal w-12 text-center">#</th>
                                     <th className="p-4 font-normal">Student Info</th>
                                     <th className="p-4 font-normal">Room/Block</th>
                                     <th className="p-4 font-normal text-center">Breakfast Status</th>
@@ -390,12 +394,13 @@ export default function AdminDashboard() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
-                                {students.map((student) => {
+                                {students.map((student, index) => {
                                     const breakfastMark = attendances.find(a => a.userId === student.userId && a.mealType === 'breakfast');
                                     const dinnerMark = attendances.find(a => a.userId === student.userId && a.mealType === 'dinner');
 
                                     return (
                                         <tr key={student.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
                                             <td className="p-4 whitespace-nowrap">
                                                 <div className="flex flex-col">
                                                     <span className="font-semibold text-white text-base">{student.fullName}</span>
@@ -426,7 +431,7 @@ export default function AdminDashboard() {
 
                                 {students.length === 0 && (
                                     <tr>
-                                        <td colSpan={5} className="p-8 text-center text-muted-foreground" style={{ height: '200px' }}>
+                                        <td colSpan={6} className="p-8 text-center text-muted-foreground" style={{ height: '200px' }}>
                                             No students found in the roster.
                                         </td>
                                     </tr>
