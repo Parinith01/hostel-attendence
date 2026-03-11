@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { UtensilsCrossed, ArrowRight, LogOut, CheckCircle, Sunrise, Sunset, AlertTriangle, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import QRCode from "react-qr-code";
 
 type SettingsData = {
     breakfastStart: string;
@@ -19,6 +20,7 @@ export default function Dashboard() {
     const [returnMealType, setReturnMealType] = useState<"breakfast" | "dinner" | "">("");
     const [selectedAbsentMeal, setSelectedAbsentMeal] = useState<"breakfast" | "dinner" | null>(null);
     const [messages, setMessages] = useState<{ breakfast?: string, dinner?: string }>({});
+    const [sundayToken, setSundayToken] = useState<string | null>(null);
     const { toast } = useToast();
 
     useEffect(() => {
@@ -39,6 +41,15 @@ export default function Dashboard() {
                     if (Object.keys(newMessages).length > 0) setMessages(newMessages);
                 })
                 .catch(err => console.error(err));
+
+            fetch(`/api/attendance/sunday-token?userId=${user.userId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.token) {
+                        setSundayToken(data.token);
+                    }
+                })
+                .catch(err => console.error("Error fetching token:", err));
         }
     }, []);
 
@@ -181,6 +192,23 @@ export default function Dashboard() {
                             Student Portal
                         </p>
                     </div>
+
+                    {sundayToken && (
+                        <div className="mb-4 mt-2 p-4 rounded-[20px] bg-gradient-to-br from-cyan-500/10 to-blue-500/5 border border-cyan-500/20 flex flex-col items-center justify-center gap-3 backdrop-blur-md relative overflow-hidden group">
+                            <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/0 via-cyan-400/10 to-cyan-400/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                            <div className="flex items-center gap-2 text-cyan-400 font-display tracking-widest text-xs font-bold uppercase drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]">
+                                <CheckCircle className="w-4 h-4" />
+                                Sunday Breakfast Token
+                            </div>
+                            <div className="p-2 bg-white rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.3)]">
+                                <QRCode value={sundayToken} size={120} />
+                            </div>
+                            <div className="font-mono text-lg font-bold text-white tracking-widest drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]">
+                                {sundayToken}
+                            </div>
+                            <p className="text-[10px] text-cyan-200/50 text-center max-w-[200px]">Show this verified token to the staff to claim your Sunday breakfast.</p>
+                        </div>
+                    )}
 
                     {/* Action Cards */}
                     <div className="space-y-4">

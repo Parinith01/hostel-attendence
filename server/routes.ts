@@ -7,6 +7,29 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  async function getMergedAttendance(dateStr: string) {
+    const actual = await storage.getAttendanceByDate(dateStr);
+    const ongoing = await storage.getOngoingAbsences(dateStr);
+
+    const synthetic: any[] = [];
+    ongoing.forEach(abs => {
+      if (dateStr < (abs.returnDate || "")) {
+        synthetic.push({ ...abs, id: abs.id + '-b', date: dateStr, mealType: 'breakfast' });
+        synthetic.push({ ...abs, id: abs.id + '-d', date: dateStr, mealType: 'dinner' });
+      } else if (dateStr === abs.returnDate && abs.returnMealType === 'dinner') {
+        synthetic.push({ ...abs, id: abs.id + '-b', date: dateStr, mealType: 'breakfast' });
+      }
+    });
+
+    const merged = [...synthetic];
+    actual.forEach(att => {
+      const idx = merged.findIndex(m => m.userId === att.userId && m.mealType === att.mealType);
+      if (idx !== -1) merged.splice(idx, 1);
+      merged.push(att);
+    });
+    return merged;
+  }
+
   app.get("/api/settings", async (req, res) => {
     const s = await storage.getSettings();
     res.json(s);
@@ -19,9 +42,29 @@ export async function registerRoutes(
     const dateStr = nowIST.getFullYear() + '-' +
       String(nowIST.getMonth() + 1).padStart(2, '0') + '-' +
       String(nowIST.getDate()).padStart(2, '0');
-    const allToday = await storage.getAttendanceByDate(dateStr);
-    const userAttendance = allToday.filter(a => a.userId === String(userId));
+
+    const allToday = await getMergedAttendance(dateStr);
+    const userAttendance = allToday.filter((a: any) => a.userId === String(userId));
     res.json(userAttendance);
+  });
+
+  app.get("/api/attendance/sunday-token", async (req, res) => {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ message: "userId required" });
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const d = nowIST.getDay();
+    if (d === 0) { // Sunday
+      const targetDate = new Date(nowIST);
+      targetDate.setDate(targetDate.getDate() - 1);
+      const dateStr = targetDate.getFullYear() + '-' + String(targetDate.getMonth() + 1).padStart(2, '0') + '-' + String(targetDate.getDate()).padStart(2, '0');
+      const att = await storage.getAttendanceByUserAndDate(String(userId), dateStr, 'dinner');
+      return res.json({ token: att?.sundayToken || null });
+    } else if (d === 6) { // Saturday
+      const dateStr = nowIST.getFullYear() + '-' + String(nowIST.getMonth() + 1).padStart(2, '0') + '-' + String(nowIST.getDate()).padStart(2, '0');
+      const att = await storage.getAttendanceByUserAndDate(String(userId), dateStr, 'dinner');
+      return res.json({ token: att?.sundayToken || null });
+    }
+    res.json({ token: null });
   });
 
   app.post("/api/settings", async (req, res) => {
@@ -35,8 +78,23 @@ export async function registerRoutes(
 
   app.post("/api/admin/verify-attendance", async (req, res) => {
     const { id, verifiedByAdmin } = req.body;
-    const att = await storage.verifyAttendance(id, verifiedByAdmin);
-    if (!att) return res.status(404).json({ message: "Attendance not found" });
+    const attRec = await storage.getAttendanceById(id);
+    if (!attRec) return res.status(404).json({ message: "Attendance not found" });
+
+    let sundayToken = undefined;
+    if (verifiedByAdmin && attRec.mealType === 'dinner') {
+      const parts = attRec.date.split('-');
+      if (parts.length === 3) {
+        const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        if (dateObj.getDay() === 6) { // Saturday
+          sundayToken = "TKN-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+      }
+    } else if (!verifiedByAdmin) {
+      sundayToken = null; // Clear if not verified
+    }
+
+    const att = await storage.verifyAttendance(id, verifiedByAdmin, sundayToken);
     res.json(att);
   });
 
@@ -156,12 +214,35 @@ export async function registerRoutes(
       : nowIST.getFullYear() + '-' +
       String(nowIST.getMonth() + 1).padStart(2, '0') + '-' +
       String(nowIST.getDate()).padStart(2, '0');
-    const todayAttendance = await storage.getAttendanceByDate(dateStr);
+    const todayAttendance = await getMergedAttendance(dateStr);
+
+    let sundayTokens: Record<string, string> = {};
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      if (dateObj.getDay() === 0) { // Sunday
+        dateObj.setDate(dateObj.getDate() - 1); // Get Saturday
+        const prevDateStr = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + String(dateObj.getDate()).padStart(2, '0');
+        const prevAtt = await storage.getAttendanceByDate(prevDateStr);
+        prevAtt.forEach(a => {
+          if (a.mealType === 'dinner' && a.sundayToken) {
+            sundayTokens[a.userId] = a.sundayToken;
+          }
+        });
+      } else if (dateObj.getDay() === 6) { // Saturday
+        todayAttendance.forEach(a => {
+          if (a.mealType === 'dinner' && a.sundayToken) {
+            sundayTokens[a.userId] = a.sundayToken;
+          }
+        });
+      }
+    }
 
     res.json({
       date: dateStr,
       students,
-      attendances: todayAttendance
+      attendances: todayAttendance,
+      sundayTokens,
     });
   });
 

@@ -31,6 +31,7 @@ type DashboardData = {
     date: string;
     students: Student[];
     attendances: Attendance[];
+    sundayTokens: Record<string, string>;
 };
 
 type SettingsData = {
@@ -251,7 +252,7 @@ export default function AdminDashboard() {
 
     if (!data) return null;
 
-    const { students, attendances, date } = data;
+    const { students, attendances, date, sundayTokens } = data;
 
     const totalStudents = students.length;
     const breakfastPresent = attendances.filter(a => a.mealType === "breakfast" && a.status === "present").length;
@@ -451,10 +452,24 @@ export default function AdminDashboard() {
                                                 {student.roomNumber} - {student.hostelBlock}
                                             </td>
                                             <td className="p-4 text-center">
-                                                {renderMarkBadge(breakfastMark)}
+                                                <div className="flex flex-col items-center gap-2">
+                                                    {renderMarkBadge(breakfastMark)}
+                                                    {sundayTokens && sundayTokens[student.userId] && breakfastMark && breakfastMark.status === 'present' && (
+                                                        <div className="inline-flex items-center gap-1 p-1 px-2 rounded bg-cyan-500/10 border border-cyan-500/30 w-max" title="Sunday Breakfast Token">
+                                                            <span className="text-[9px] text-cyan-400 font-mono font-bold">{sundayTokens[student.userId]}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="p-4 text-center">
-                                                {renderMarkBadge(dinnerMark)}
+                                                <div className="flex flex-col items-center gap-2">
+                                                    {renderMarkBadge(dinnerMark)}
+                                                    {sundayTokens && sundayTokens[student.userId] && dinnerMark && dinnerMark.status === 'present' && (
+                                                        <div className="inline-flex items-center gap-1 p-1 px-2 rounded bg-cyan-500/10 border border-cyan-500/30 w-max" title="Sunday Breakfast Token">
+                                                            <span className="text-[9px] text-cyan-400 font-mono font-bold">{sundayTokens[student.userId]}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="p-4 text-right">
                                                 <button

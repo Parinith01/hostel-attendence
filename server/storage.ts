@@ -1,7 +1,7 @@
 import { users, attendance, settings, type User, type InsertUser, type Attendance, type InsertAttendance, type Settings } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, lt, gte } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -13,10 +13,12 @@ export interface IStorage {
 
   markAttendance(attendance: InsertAttendance): Promise<Attendance>;
   getAttendanceByDate(date: string): Promise<Attendance[]>;
+  getOngoingAbsences(dateStr: string): Promise<Attendance[]>;
   getAttendanceByUserAndDate(userId: string, date: string, mealType: string): Promise<Attendance | undefined>;
   getSettings(): Promise<Settings>;
   updateSettings(settings: Partial<Settings>): Promise<Settings>;
-  verifyAttendance(id: string, verified: boolean): Promise<Attendance | undefined>;
+  getAttendanceById(id: string): Promise<Attendance | undefined>;
+  verifyAttendance(id: string, verified: boolean, sundayToken?: string | null): Promise<Attendance | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -104,6 +106,7 @@ export class MemStorage implements IStorage {
       absentReason: insertAttendance.absentReason ?? null,
       returnDate: insertAttendance.returnDate ?? null,
       returnMealType: insertAttendance.returnMealType ?? null,
+      sundayToken: insertAttendance.sundayToken ?? null,
       verifiedByAdmin: false,
     };
     this.attendances.set(id, att);
@@ -112,6 +115,14 @@ export class MemStorage implements IStorage {
 
   async getAttendanceByDate(date: string): Promise<Attendance[]> {
     return Array.from(this.attendances.values()).filter(a => a.date === date);
+  }
+
+  async getOngoingAbsences(dateStr: string): Promise<Attendance[]> {
+    return Array.from(this.attendances.values()).filter(a => {
+      if (a.status !== 'absent' || !a.returnDate || !a.returnMealType) return false;
+      if (a.date >= dateStr) return false;
+      return a.returnDate >= dateStr;
+    });
   }
 
   async getAttendanceByUserAndDate(userId: string, date: string, mealType: string): Promise<Attendance | undefined> {
@@ -127,10 +138,18 @@ export class MemStorage implements IStorage {
     return this.settingsConfig;
   }
 
-  async verifyAttendance(id: string, verified: boolean): Promise<Attendance | undefined> {
+  async getAttendanceById(id: string): Promise<Attendance | undefined> {
+    return this.attendances.get(id);
+  }
+
+  async verifyAttendance(id: string, verified: boolean, sundayToken?: string | null): Promise<Attendance | undefined> {
     const att = this.attendances.get(id);
     if (!att) return undefined;
     att.verifiedByAdmin = verified;
+    if (sundayToken !== undefined) {
+      if (sundayToken === null) att.sundayToken = null;
+      else att.sundayToken = sundayToken;
+    }
     this.attendances.set(id, att);
     return att;
   }
@@ -189,6 +208,17 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(attendance).where(eq(attendance.date, dateStr));
   }
 
+  async getOngoingAbsences(dateStr: string): Promise<Attendance[]> {
+    if (!db) return [];
+    const allAbsences = await db.select().from(attendance)
+      .where(and(
+        eq(attendance.status, 'absent'),
+        lt(attendance.date, dateStr),
+        gte(attendance.returnDate, dateStr)
+      ));
+    return allAbsences;
+  }
+
   async getAttendanceByUserAndDate(userId: string, dateStr: string, mealType: string): Promise<Attendance | undefined> {
     if (!db) return undefined;
     const [att] = await db.select().from(attendance)
@@ -219,9 +249,19 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async verifyAttendance(id: string, verified: boolean): Promise<Attendance | undefined> {
+  async verifyAttendance(id: string, verified: boolean, sundayToken?: string | null): Promise<Attendance | undefined> {
     if (!db) return undefined;
-    const [att] = await db.update(attendance).set({ verifiedByAdmin: verified }).where(eq(attendance.id, id)).returning();
+    const updateData: any = { verifiedByAdmin: verified };
+    if (sundayToken !== undefined) {
+      updateData.sundayToken = sundayToken;
+    }
+    const [att] = await db.update(attendance).set(updateData).where(eq(attendance.id, id)).returning();
+    return att;
+  }
+
+  async getAttendanceById(id: string): Promise<Attendance | undefined> {
+    if (!db) return undefined;
+    const [att] = await db.select().from(attendance).where(eq(attendance.id, id));
     return att;
   }
 }
