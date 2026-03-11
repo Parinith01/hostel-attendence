@@ -46,16 +46,15 @@ export async function registerRoutes(
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomStr = tomorrow.getFullYear() + '-' + String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' + String(tomorrow.getDate()).padStart(2, '0');
 
-    // Get dinner for today (merged with synthetic ongoing absences)
-    const todayAtt = await getMergedAttendance(todayStr);
-    
-    // For tomorrow's breakfast - use ONLY actual voted records, not synthetic absence records
-    // (A student absent tonight should still be able to vote for tomorrow's breakfast)
-    const tomActualAtt = await storage.getAttendanceByDate(tomStr);
+    // Get dinner for today and breakfast for tomorrow (both merged with ongoing absences)
+    const [todayAtt, tomAtt] = await Promise.all([
+      getMergedAttendance(todayStr),
+      getMergedAttendance(tomStr)
+    ]);
 
     const userAttendance = [
       ...todayAtt.filter((a: any) => a.userId === String(userId) && a.mealType === 'dinner'),
-      ...tomActualAtt.filter((a: any) => a.userId === String(userId) && a.mealType === 'breakfast')
+      ...tomAtt.filter((a: any) => a.userId === String(userId) && a.mealType === 'breakfast')
     ];
     res.json(userAttendance);
   });
