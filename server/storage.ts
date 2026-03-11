@@ -19,6 +19,7 @@ export interface IStorage {
   updateSettings(settings: Partial<Settings>): Promise<Settings>;
   getAttendanceById(id: string): Promise<Attendance | undefined>;
   verifyAttendance(id: string, verified: boolean, sundayToken?: string | null): Promise<Attendance | undefined>;
+  deleteAttendance(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -153,6 +154,10 @@ export class MemStorage implements IStorage {
     this.attendances.set(id, att);
     return att;
   }
+
+  async deleteAttendance(id: string): Promise<boolean> {
+    return this.attendances.delete(id);
+  }
 }
 
 export class DatabaseStorage implements IStorage {
@@ -263,6 +268,11 @@ export class DatabaseStorage implements IStorage {
     if (!db) return undefined;
     const [att] = await db.select().from(attendance).where(eq(attendance.id, id));
     return att;
+  }
+  async deleteAttendance(id: string): Promise<boolean> {
+    if (!db) return false;
+    await db.delete(attendance).where(eq(attendance.id, id));
+    return true;
   }
 }
 

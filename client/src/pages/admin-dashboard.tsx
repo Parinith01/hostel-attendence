@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Clock, Download, Settings as SettingsIcon, Save, Eye, X, Trash2 } from "lucide-react";
+import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Download, Settings as SettingsIcon, Save, Eye, X, Trash2, XOctagon, UserCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -48,6 +48,9 @@ export default function AdminDashboard() {
     const [savingSettings, setSavingSettings] = useState(false);
     const [showStudentsModal, setShowStudentsModal] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [cancellingAbsence, setCancellingAbsence] = useState<Attendance | null>(null);
+    const [cancelReason, setCancelReason] = useState("");
+    const [markingPresent, setMarkingPresent] = useState(false);
     const { toast } = useToast();
 
     const fetchDashboard = async () => {
@@ -95,6 +98,50 @@ export default function AdminDashboard() {
     useEffect(() => {
         fetchDashboard();
     }, []);
+
+    const handleCancelAbsence = async (markPresent: boolean) => {
+        if (!cancellingAbsence) return;
+        setMarkingPresent(true);
+        try {
+            // Step 1: Delete the absence record
+            const delRes = await fetch(`/api/admin/attendance/${cancellingAbsence.id}`, { method: 'DELETE' });
+            if (!delRes.ok) throw new Error('Failed to remove absence record.');
+
+            // Step 2: Optionally mark them as present directly
+            if (markPresent) {
+                await fetch('/api/admin/mark-present', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: cancellingAbsence.userId,
+                        mealType: cancellingAbsence.mealType,
+                        date: cancellingAbsence.date,
+                    })
+                });
+            }
+
+            // Update local state
+            setData(prev => {
+                if (!prev) return prev;
+                const filtered = prev.attendances.filter(a => a.id !== cancellingAbsence.id);
+                return { ...prev, attendances: filtered };
+            });
+
+            toast({
+                title: markPresent ? '✅ Marked Present' : '🗑️ Absence Removed',
+                description: markPresent
+                    ? `Student has been marked present for ${cancellingAbsence.mealType}.`
+                    : `Absence removed. Student can now re-vote.`,
+                className: 'bg-green-900/80 text-green-100 border-green-700'
+            });
+            setCancellingAbsence(null);
+            setCancelReason("");
+        } catch (e: any) {
+            toast({ title: 'Error', description: e.message, variant: 'destructive' });
+        } finally {
+            setMarkingPresent(false);
+        }
+    };
 
     const handleSaveSettings = async () => {
         setSavingSettings(true);
@@ -222,6 +269,12 @@ export default function AdminDashboard() {
                             Returns: {mark.returnDate} ({mark.returnMealType})
                         </span>
                     )}
+                    <button
+                        onClick={() => setCancellingAbsence(mark)}
+                        className="mt-1 flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 hover:text-red-300 text-[9px] font-display tracking-widest transition-all"
+                    >
+                        <XOctagon className="w-3 h-3" /> CANCEL
+                    </button>
                 </div>
             );
         }
@@ -264,6 +317,49 @@ export default function AdminDashboard() {
             <div className="bg-orb orb-1 fixed"></div>
             <div className="bg-orb orb-2 fixed"></div>
             <div className="bg-orb orb-3 fixed"></div>
+
+            {/* Cancel Absence Modal */}
+            {cancellingAbsence && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="glass-card w-full max-w-md p-6 rounded-2xl border border-yellow-500/30 shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <XOctagon className="w-6 h-6 text-yellow-400" />
+                            <h2 className="font-display text-lg font-bold tracking-widest text-yellow-400 uppercase">Cancel Absence</h2>
+                        </div>
+                        <p className="text-sm text-white/80 mb-2">
+                            You are removing the <span className="text-yellow-300 font-bold">{cancellingAbsence.mealType}</span> absence record for student <span className="text-cyan-300 font-bold">{cancellingAbsence.userId}</span>.
+                        </p>
+                        <p className="text-xs text-yellow-200/60 mb-1">Original reason: <span className="italic">{cancellingAbsence.absentReason}</span></p>
+                        <p className="text-xs text-white/50 mb-5">After removal, the student can re-vote, or you can mark them present directly below.</p>
+
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={() => handleCancelAbsence(true)}
+                                disabled={markingPresent}
+                                className="w-full py-3 rounded-xl bg-green-500/20 hover:bg-green-500/30 border border-green-500/40 text-green-300 font-display tracking-widest text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                            >
+                                <UserCheck className="w-4 h-4" />
+                                {markingPresent ? 'Processing...' : 'REMOVE & MARK PRESENT NOW'}
+                            </button>
+                            <button
+                                onClick={() => handleCancelAbsence(false)}
+                                disabled={markingPresent}
+                                className="w-full py-3 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 font-display tracking-widest text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                            >
+                                <XOctagon className="w-4 h-4" />
+                                {markingPresent ? 'Processing...' : 'REMOVE ONLY (LET STUDENT RE-VOTE)'}
+                            </button>
+                            <button
+                                onClick={() => { setCancellingAbsence(null); setCancelReason(""); }}
+                                disabled={markingPresent}
+                                className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-muted-foreground font-display tracking-widest text-xs transition-all"
+                            >
+                                KEEP ABSENCE (NO CHANGE)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Students Modal */}
             {showStudentsModal && (

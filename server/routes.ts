@@ -131,6 +131,34 @@ export async function registerRoutes(
     res.json({ message: "Student removed successfully." });
   });
 
+  // Admin: Cancel/remove an absence record so student can re-vote
+  app.delete("/api/admin/attendance/:id", async (req, res) => {
+    const { id } = req.params;
+    const att = await storage.getAttendanceById(id);
+    if (!att) return res.status(404).json({ message: "Attendance record not found." });
+    if (att.status !== 'absent') return res.status(400).json({ message: "Can only cancel absent records." });
+    const deleted = await storage.deleteAttendance(id);
+    if (!deleted) return res.status(500).json({ message: "Failed to remove attendance record." });
+    res.json({ message: "Absence record removed. Student can now re-vote." });
+  });
+
+  // Admin: Directly mark a student present (bypasses time window, for special cases)
+  app.post("/api/admin/mark-present", async (req, res) => {
+    const { userId, mealType, date } = req.body;
+    if (!userId || !mealType || !date) return res.status(400).json({ message: "userId, mealType and date are required." });
+    const user = await storage.getUserByUserId(userId);
+    if (!user) return res.status(404).json({ message: "Student not found." });
+    const existing = await storage.getAttendanceByUserAndDate(userId, date, mealType);
+    if (existing) return res.status(400).json({ message: "Attendance already exists for this meal." });
+    const att = await storage.markAttendance({
+      userId, date, mealType,
+      timestamp: new Date().toISOString(),
+      status: 'present',
+      absentReason: null, returnDate: null, returnMealType: null
+    });
+    res.status(201).json(att);
+  });
+
   app.post("/api/register", async (req, res) => {
     try {
       const existingUser = await storage.getUserByUserId(req.body.userId);
