@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import cors from "cors";
+import { pool } from "./db";
 
 const app = express();
 app.use(cors({ origin: "*" }));
@@ -63,7 +64,6 @@ app.use((req, res, next) => {
 
 (async () => {
   try {
-    const { pool } = await import("./db");
     if (pool) {
       await pool.query(`ALTER TABLE "attendance" ADD COLUMN IF NOT EXISTS "return_date" text;`);
       await pool.query(`ALTER TABLE "attendance" ADD COLUMN IF NOT EXISTS "return_meal_type" text;`);
