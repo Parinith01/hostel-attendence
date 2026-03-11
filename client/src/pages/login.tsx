@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useLocation, useSearch, Link } from "wouter";
-import { User, Lock, ArrowRight, ArrowLeft } from "lucide-react";
+import { User, Lock, ArrowRight, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 export default function Login() {
     const [userId, setUserId] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
     const search = useSearch();
@@ -119,14 +120,21 @@ export default function Login() {
                                     <Lock className="w-5 h-5" />
                                 </div>
                                 <input
-                                    type="password"
+                                    type={showPassword ? "text" : "password"}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className={`glass-input w-full pl-12 pr-4 py-3 sm:py-4 rounded-xl font-medium text-lg placeholder:text-muted-foreground/50 transition-all ${isParamsAdmin ? 'focus:glow-magenta' : 'focus:glow-cyan'}`}
+                                    className={`glass-input w-full pl-12 pr-12 py-3 sm:py-4 rounded-xl font-medium text-lg placeholder:text-muted-foreground/50 transition-all ${isParamsAdmin ? 'focus:glow-magenta' : 'focus:glow-cyan'}`}
                                     placeholder="Min 8 characters"
                                     required
                                     minLength={8}
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted-foreground hover:text-white transition-colors"
+                                >
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
                             </div>
                         </div>
 
