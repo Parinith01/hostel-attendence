@@ -456,7 +456,7 @@ export default function AdminDashboard() {
                                                     {renderMarkBadge(breakfastMark)}
                                                     {sundayTokens && sundayTokens[student.userId] && breakfastMark && breakfastMark.status === 'present' && (
                                                         <div className="inline-flex items-center gap-1 p-1 px-2 rounded bg-cyan-500/10 border border-cyan-500/30 w-max" title="Sunday Breakfast Token">
-                                                            <span className="text-[9px] text-cyan-400 font-mono font-bold">{sundayTokens[student.userId]}</span>
+                                                            <span className="text-[9px] text-cyan-400 font-mono font-bold">{sundayTokens[student.userId].split(':')[0]}</span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -466,7 +466,7 @@ export default function AdminDashboard() {
                                                     {renderMarkBadge(dinnerMark)}
                                                     {sundayTokens && sundayTokens[student.userId] && dinnerMark && dinnerMark.status === 'present' && (
                                                         <div className="inline-flex items-center gap-1 p-1 px-2 rounded bg-cyan-500/10 border border-cyan-500/30 w-max" title="Sunday Breakfast Token">
-                                                            <span className="text-[9px] text-cyan-400 font-mono font-bold">{sundayTokens[student.userId]}</span>
+                                                            <span className="text-[9px] text-cyan-400 font-mono font-bold">{sundayTokens[student.userId].split(':')[0]}</span>
                                                         </div>
                                                     )}
                                                 </div>

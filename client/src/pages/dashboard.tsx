@@ -204,7 +204,7 @@ export default function Dashboard() {
                                 <QRCode value={sundayToken} size={120} />
                             </div>
                             <div className="font-mono text-lg font-bold text-white tracking-widest drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]">
-                                {sundayToken}
+                                {sundayToken.split(':')[0]}
                             </div>
                             <p className="text-[10px] text-cyan-200/50 text-center max-w-[200px]">Show this verified token to the staff to claim your Sunday breakfast.</p>
                         </div>
