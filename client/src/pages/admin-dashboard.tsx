@@ -108,8 +108,9 @@ export default function AdminDashboard() {
             if (!delRes.ok) throw new Error('Failed to remove absence record.');
 
             // Step 2: Optionally mark them as present directly
+            let newRecord: Attendance | null = null;
             if (markPresent) {
-                await fetch('/api/admin/mark-present', {
+                const presRes = await fetch('/api/admin/mark-present', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -118,13 +119,17 @@ export default function AdminDashboard() {
                         date: cancellingAbsence.date,
                     })
                 });
+                if (presRes.ok) {
+                    newRecord = await presRes.json();
+                }
             }
 
-            // Update local state
+            // Update local state: remove absence, add new present record if applicable
             setData(prev => {
                 if (!prev) return prev;
                 const filtered = prev.attendances.filter(a => a.id !== cancellingAbsence.id);
-                return { ...prev, attendances: filtered };
+                const updated = newRecord ? [...filtered, newRecord] : filtered;
+                return { ...prev, attendances: updated };
             });
 
             toast({
