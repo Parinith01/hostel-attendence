@@ -54,6 +54,10 @@ export async function registerRoutes(
     const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
     const d = nowIST.getDay();
     if (d === 0) { // Sunday
+      // Expire token strictly at 1:00 PM (13:00) on Sunday
+      if (nowIST.getHours() >= 13) {
+        return res.json({ token: null });
+      }
       const targetDate = new Date(nowIST);
       targetDate.setDate(targetDate.getDate() - 1);
       const dateStr = targetDate.getFullYear() + '-' + String(targetDate.getMonth() + 1).padStart(2, '0') + '-' + String(targetDate.getDate()).padStart(2, '0');
@@ -225,14 +229,17 @@ export async function registerRoutes(
     if (parts.length === 3) {
       const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
       if (dateObj.getDay() === 0) { // Sunday
-        dateObj.setDate(dateObj.getDate() - 1); // Get Saturday
-        const prevDateStr = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + String(dateObj.getDate()).padStart(2, '0');
-        const prevAtt = await storage.getAttendanceByDate(prevDateStr);
-        prevAtt.forEach(a => {
-          if (a.mealType === 'dinner' && a.sundayToken) {
-            sundayTokens[a.userId] = a.sundayToken;
-          }
-        });
+        // Expire tokens strictly at 1:00 PM (13:00) on Sunday for admin view too
+        if (nowIST.getHours() < 13) {
+          dateObj.setDate(dateObj.getDate() - 1); // Get Saturday
+          const prevDateStr = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + String(dateObj.getDate()).padStart(2, '0');
+          const prevAtt = await storage.getAttendanceByDate(prevDateStr);
+          prevAtt.forEach(a => {
+            if (a.mealType === 'dinner' && a.sundayToken) {
+              sundayTokens[a.userId] = a.sundayToken;
+            }
+          });
+        }
       } else if (dateObj.getDay() === 6) { // Saturday
         todayAttendance.forEach(a => {
           if (a.mealType === 'dinner' && a.sundayToken) {
