@@ -53,8 +53,9 @@ export default function Dashboard() {
         }
     }, []);
 
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    // Always compute current time in IST to match server-side window logic
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const currentMinutes = nowIST.getHours() * 60 + nowIST.getMinutes();
 
     const toMinutes = (t: string) => {
         const [h, m] = t.split(':').map(Number);
