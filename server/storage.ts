@@ -102,6 +102,8 @@ export class MemStorage implements IStorage {
       timestamp: insertAttendance.timestamp,
       status: insertAttendance.status ?? 'present',
       absentReason: insertAttendance.absentReason ?? null,
+      returnDate: insertAttendance.returnDate ?? null,
+      returnMealType: insertAttendance.returnMealType ?? null,
       verifiedByAdmin: false,
     };
     this.attendances.set(id, att);

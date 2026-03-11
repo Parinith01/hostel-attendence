@@ -15,6 +15,8 @@ export default function Dashboard() {
     const [settings, setSettings] = useState<SettingsData | null>(null);
     const [absentMode, setAbsentMode] = useState(false);
     const [absentReason, setAbsentReason] = useState("");
+    const [returnDate, setReturnDate] = useState("");
+    const [returnMealType, setReturnMealType] = useState<"breakfast" | "dinner" | "">("");
     const [selectedAbsentMeal, setSelectedAbsentMeal] = useState<"breakfast" | "dinner" | null>(null);
     const [messages, setMessages] = useState<{ breakfast?: string, dinner?: string }>({});
     const { toast } = useToast();
@@ -79,9 +81,19 @@ export default function Dashboard() {
             return;
         }
 
-        if (status === "absent" && absentMode && !absentReason.trim()) {
-            toast({ title: "Reason Required", description: "Please provide a reason for your absence.", variant: "destructive" });
-            return;
+        if (status === "absent" && absentMode) {
+            if (!absentReason.trim()) {
+                toast({ title: "Reason Required", description: "Please provide a reason for your absence.", variant: "destructive" });
+                return;
+            }
+            if (!returnDate) {
+                toast({ title: "Return Date Required", description: "Please provide your return date.", variant: "destructive" });
+                return;
+            }
+            if (!returnMealType) {
+                toast({ title: "Return Meal Required", description: "Please select the meal for your return.", variant: "destructive" });
+                return;
+            }
         }
 
         const user = JSON.parse(storedUser);
@@ -95,6 +107,8 @@ export default function Dashboard() {
                     userId: user.userId,
                     status,
                     absentReason: status === "absent" ? absentReason : undefined,
+                    returnDate: status === "absent" ? returnDate : undefined,
+                    returnMealType: status === "absent" ? returnMealType : undefined,
                     selectedMealType: mealType
                 })
             });
@@ -111,6 +125,8 @@ export default function Dashboard() {
             if (status === "absent") {
                 setAbsentMode(false);
                 setAbsentReason("");
+                setReturnDate("");
+                setReturnMealType("");
                 setSelectedAbsentMeal(null);
             }
 
@@ -255,15 +271,48 @@ export default function Dashboard() {
                                     <AlertTriangle className="w-4 h-4" />
                                     <label className="text-sm font-display tracking-widest font-bold">REASON FOR ABSENCE ({selectedAbsentMeal?.toUpperCase()})</label>
                                 </div>
-                                <textarea
-                                    value={absentReason}
-                                    onChange={(e) => setAbsentReason(e.target.value)}
-                                    placeholder={`Please provide a valid reason for missing ${selectedAbsentMeal}...`}
-                                    className="w-full p-3 rounded-xl bg-white/5 border border-yellow-500/30 text-white placeholder:text-muted-foreground focus:outline-none focus:border-yellow-500 focus:shadow-[0_0_15px_rgba(234,179,8,0.3)] resize-none min-h-[100px]"
-                                />
+                                <div className="space-y-4">
+                                    <textarea
+                                        value={absentReason}
+                                        onChange={(e) => setAbsentReason(e.target.value)}
+                                        placeholder={`Please provide a valid reason for missing ${selectedAbsentMeal}...`}
+                                        className="w-full p-3 rounded-xl bg-white/5 border border-yellow-500/30 text-white placeholder:text-muted-foreground focus:outline-none focus:border-yellow-500 focus:shadow-[0_0_15px_rgba(234,179,8,0.3)] resize-none"
+                                        rows={2}
+                                    />
+
+                                    <div>
+                                        <label className="text-xs font-display tracking-widest text-yellow-400 mb-1 block">Expected Return Date</label>
+                                        <input
+                                            type="date"
+                                            value={returnDate}
+                                            min={new Date().toISOString().split("T")[0]}
+                                            onChange={(e) => setReturnDate(e.target.value)}
+                                            className="w-full p-3 rounded-xl bg-white/5 border border-yellow-500/30 text-white placeholder:text-muted-foreground focus:outline-none focus:border-yellow-500 focus:shadow-[0_0_15px_rgba(234,179,8,0.3)]"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-display tracking-widest text-yellow-400 mb-1 block">First Meal on Return</label>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setReturnMealType("breakfast")}
+                                                className={`flex-1 py-2 rounded-lg text-sm font-display tracking-wider transition border ${returnMealType === "breakfast" ? "bg-yellow-500/30 text-yellow-100 border-yellow-500" : "bg-white/5 text-muted-foreground border-yellow-500/20 hover:border-yellow-500/40"}`}
+                                            >
+                                                BREAKFAST
+                                            </button>
+                                            <button
+                                                onClick={() => setReturnMealType("dinner")}
+                                                className={`flex-1 py-2 rounded-lg text-sm font-display tracking-wider transition border ${returnMealType === "dinner" ? "bg-yellow-500/30 text-yellow-100 border-yellow-500" : "bg-white/5 text-muted-foreground border-yellow-500/20 hover:border-yellow-500/40"}`}
+                                            >
+                                                DINNER
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <button
                                     onClick={() => selectedAbsentMeal && handleAttendance(selectedAbsentMeal, "absent")}
-                                    disabled={isLoading || !absentReason.trim()}
+                                    disabled={isLoading || !absentReason.trim() || !returnDate || !returnMealType}
                                     className="w-full py-3 rounded-xl bg-yellow-500 text-black font-display font-bold uppercase tracking-wider text-sm hover:bg-yellow-400 hover:shadow-[0_0_15px_rgba(234,179,8,0.5)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {isLoading ? "Submitting..." : "Confirm Absence"}

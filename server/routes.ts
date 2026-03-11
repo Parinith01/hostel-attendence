@@ -72,7 +72,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/attendance", async (req, res) => {
-    const { userId, status, absentReason, selectedMealType } = req.body;
+    const { userId, status, absentReason, returnDate, returnMealType, selectedMealType } = req.body;
     const user = await storage.getUserByUserId(userId);
     if (!user) return res.status(404).json({ message: "User not found." });
 
@@ -114,10 +114,15 @@ export async function registerRoutes(
       if (!mealType) {
         return res.status(400).json({ message: "Must select a meal type when marking absent." });
       }
-    }
-
-    if (status === "absent" && !absentReason) {
-      return res.status(400).json({ message: "Must provide a reason when marking absent." });
+      if (!absentReason) {
+        return res.status(400).json({ message: "Must provide a reason when marking absent." });
+      }
+      if (!returnDate) {
+        return res.status(400).json({ message: "Must provide a return date when marking absent." });
+      }
+      if (!returnMealType) {
+        return res.status(400).json({ message: "Must specify the return meal (breakfast or dinner)." });
+      }
     }
 
     const existing = await storage.getAttendanceByUserAndDate(userId, dateStr, mealType);
@@ -131,7 +136,9 @@ export async function registerRoutes(
       mealType,
       timestamp: new Date().toISOString(),
       status: status || "present",
-      absentReason: absentReason || null
+      absentReason: absentReason || null,
+      returnDate: returnDate || null,
+      returnMealType: returnMealType || null
     });
 
     res.status(201).json({

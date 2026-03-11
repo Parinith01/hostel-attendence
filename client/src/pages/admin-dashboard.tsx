@@ -23,6 +23,8 @@ type Attendance = {
     verifiedByAdmin: boolean;
     status: 'present' | 'absent';
     absentReason: string | null;
+    returnDate: string | null;
+    returnMealType: string | null;
 };
 
 type DashboardData = {
@@ -159,7 +161,9 @@ export default function AdminDashboard() {
 
             if (mark) {
                 if (mark.status === "absent") {
-                    text = `Absent - Reason: ${mark.absentReason}`;
+                    let textParts = [`Reason: ${mark.absentReason}`];
+                    if (mark.returnDate) textParts.push(`Returning: ${mark.returnDate} (${mark.returnMealType})`);
+                    text = `Absent - ${textParts.join(' | ')}`;
                     style = { fillColor: [234, 179, 8] as [number, number, number], textColor: [0, 0, 0] as [number, number, number] };
                 } else {
                     text = mark.verifiedByAdmin ? 'Present (Verified)' : 'Present (Pending)';
@@ -212,6 +216,11 @@ export default function AdminDashboard() {
                     <span className="text-[10px] text-yellow-200/70 max-w-[100px] truncate" title={mark.absentReason || ""}>
                         {mark.absentReason}
                     </span>
+                    {mark.returnDate && (
+                        <span className="text-[9px] text-yellow-300 font-medium px-1.5 py-0.5 bg-yellow-500/20 rounded mt-0.5">
+                            Returns: {mark.returnDate} ({mark.returnMealType})
+                        </span>
+                    )}
                 </div>
             );
         }
