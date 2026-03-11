@@ -82,12 +82,16 @@ export async function registerRoutes(
     if (!attRec) return res.status(404).json({ message: "Attendance not found" });
 
     let sundayToken = undefined;
-    if (verifiedByAdmin && attRec.mealType === 'dinner') {
+    if (verifiedByAdmin && attRec.status === 'present' && attRec.mealType === 'dinner') {
       const parts = attRec.date.split('-');
       if (parts.length === 3) {
         const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
         if (dateObj.getDay() === 6) { // Saturday
-          sundayToken = "TKN-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+          const allDinners = await storage.getAttendanceByDate(attRec.date);
+          const presents = allDinners.filter(a => a.mealType === 'dinner' && a.status === 'present');
+          presents.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          const rank = presents.findIndex(a => a.id === attRec.id) + 1;
+          sundayToken = rank > 0 ? String(rank).padStart(2, '0') : "00";
         }
       }
     } else if (!verifiedByAdmin) {
