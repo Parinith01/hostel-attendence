@@ -62,6 +62,17 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  try {
+    const { pool } = await import("./db");
+    if (pool) {
+      await pool.query(`ALTER TABLE "attendance" ADD COLUMN IF NOT EXISTS "return_date" text;`);
+      await pool.query(`ALTER TABLE "attendance" ADD COLUMN IF NOT EXISTS "return_meal_type" text;`);
+      log("Database schema migrated for absentee fields.");
+    }
+  } catch (e: any) {
+    console.error("Failed to run schema migrations on startup:", e.message);
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
