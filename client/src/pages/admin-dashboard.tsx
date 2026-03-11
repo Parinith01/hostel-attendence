@@ -42,9 +42,15 @@ type SettingsData = {
 };
 
 export default function AdminDashboard() {
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const todayIST = nowIST.getFullYear() + '-' + String(nowIST.getMonth() + 1).padStart(2, '0') + '-' + String(nowIST.getDate()).padStart(2, '0');
+    const tomorrowIST = (() => { const d = new Date(nowIST); d.setDate(d.getDate() + 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+    const yesterdayIST = (() => { const d = new Date(nowIST); d.setDate(d.getDate() - 1); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+
     const [data, setData] = useState<DashboardData | null>(null);
     const [settings, setSettings] = useState<SettingsData>({ breakfastStart: '06:00', breakfastEnd: '09:00', dinnerStart: '18:00', dinnerEnd: '22:00' });
     const [loading, setLoading] = useState(true);
+    const [selectedDate, setSelectedDate] = useState(todayIST);
     const [savingSettings, setSavingSettings] = useState(false);
     const [showStudentsModal, setShowStudentsModal] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -53,10 +59,12 @@ export default function AdminDashboard() {
     const [markingPresent, setMarkingPresent] = useState(false);
     const { toast } = useToast();
 
-    const fetchDashboard = async () => {
+    const fetchDashboard = async (dateStr?: string) => {
+        setLoading(true);
         try {
+            const dateParam = dateStr || selectedDate;
             const [dashRes, setRes] = await Promise.all([
-                fetch("/api/admin/dashboard"),
+                fetch(`/api/admin/dashboard?date=${dateParam}`),
                 fetch("/api/settings")
             ]);
 
@@ -96,8 +104,8 @@ export default function AdminDashboard() {
     };
 
     useEffect(() => {
-        fetchDashboard();
-    }, []);
+        fetchDashboard(selectedDate);
+    }, [selectedDate]);
 
     const handleCancelAbsence = async (markPresent: boolean) => {
         if (!cancellingAbsence) return;
@@ -433,20 +441,45 @@ export default function AdminDashboard() {
                             <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-magenta-500/10 text-magenta-500 flex items-center justify-center shadow-[0_0_15px_rgba(236,72,153,0.4)] border border-magenta-500/20">
                                 <Users className="w-5 h-5 sm:w-6 sm:h-6" />
                             </div>
-                            <div>
-                                <h1 className="font-display text-xl sm:text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-magenta-400 to-purple-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.5)]">
-                                    Admin Dashboard
-                                </h1>
-                                <p className="font-display text-magenta-400/80 uppercase tracking-widest text-xs font-semibold mt-0.5 flex gap-2 items-center">
-                                    <CalendarDays className="w-3 h-3" /> {date}
-                                </p>
-                            </div>
+                                <div>
+                                    <h1 className="font-display text-xl sm:text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-magenta-400 to-purple-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.5)]">
+                                        Admin Dashboard
+                                    </h1>
+                                    <p className="font-display text-magenta-400/80 uppercase tracking-widest text-xs font-semibold mt-0.5 flex gap-2 items-center">
+                                        <CalendarDays className="w-3 h-3" /> {date}
+                                    </p>
+                                </div>
                         </div>
                         <Link href="/">
                             <span onClick={() => localStorage.removeItem('user')} className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer text-red-400 hover:text-red-300 flex items-center justify-center group shadow-[0_0_10px_rgba(239,68,68,0.2)]">
                                 <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                             </span>
                         </Link>
+                    </div>
+
+                    {/* Date Picker Row */}
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <span className="text-xs text-white/40 font-display tracking-widest uppercase">Roster Date:</span>
+                        <div className="flex gap-1.5">
+                            <button
+                                onClick={() => setSelectedDate(yesterdayIST)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-display tracking-widest border transition-all ${selectedDate === yesterdayIST ? 'bg-purple-500/30 border-purple-400/60 text-purple-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'}`}
+                            >YESTERDAY</button>
+                            <button
+                                onClick={() => setSelectedDate(todayIST)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-display tracking-widest border transition-all ${selectedDate === todayIST ? 'bg-cyan-500/30 border-cyan-400/60 text-cyan-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'}`}
+                            >TODAY</button>
+                            <button
+                                onClick={() => setSelectedDate(tomorrowIST)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-display tracking-widest border transition-all ${selectedDate === tomorrowIST ? 'bg-green-500/30 border-green-400/60 text-green-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'}`}
+                            >TOMORROW</button>
+                        </div>
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={e => setSelectedDate(e.target.value)}
+                            className="ml-auto px-3 py-1.5 rounded-lg text-xs font-mono bg-white/5 border border-white/15 text-white/80 focus:outline-none focus:border-cyan-400/50 transition-colors"
+                        />
                     </div>
 
                     <div className="flex flex-wrap gap-2">
