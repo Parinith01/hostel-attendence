@@ -95,8 +95,8 @@ export default function Login() {
             toast({ title: "Error", description: "Enter the Student User ID to reset.", variant: "destructive" });
             return;
         }
-        if (resetNewPassword.length < 6) {
-            toast({ title: "Error", description: "New password must be at least 6 characters.", variant: "destructive" });
+        if (resetNewPassword.length < 8) {
+            toast({ title: "Error", description: "New password must be at least 8 characters.", variant: "destructive" });
             return;
         }
         if (resetNewPassword !== resetConfirmPassword) {
@@ -145,8 +145,8 @@ export default function Login() {
             toast({ title: "Error", description: "Passwords do not match.", variant: "destructive" });
             return;
         }
-        if (studentNewPass.length < 6) {
-            toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
+        if (studentNewPass.length < 8) {
+            toast({ title: "Error", description: "Password must be at least 8 characters.", variant: "destructive" });
             return;
         }
 
@@ -208,25 +208,6 @@ export default function Login() {
                         </div>
                     </div>
 
-                    {/* Tab Switch */}
-                    <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
-                        <button
-                            onClick={() => setActiveTab("login")}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-display font-bold tracking-widest uppercase transition-all ${activeTab === "login"
-                                ? (isParamsAdmin ? "bg-magenta-500 text-white shadow-[0_0_10px_rgba(236,72,153,0.3)]" : "bg-cyan-500 text-white shadow-[0_0_10px_rgba(34,211,238,0.3)]")
-                                : "text-muted-foreground hover:text-white"}`}
-                        >
-                            <User className="w-4 h-4" /> Login
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("forgot")}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-display font-bold tracking-widest uppercase transition-all ${activeTab === "forgot"
-                                ? (isParamsAdmin ? "bg-cyan-500 text-white shadow-[0_0_10px_rgba(34,211,238,0.3)]" : "bg-magenta-500 text-white shadow-[0_0_10px_rgba(236,72,153,0.3)]")
-                                : "text-muted-foreground hover:text-white"}`}
-                        >
-                            <KeyRound className="w-4 h-4" /> Forgot Password
-                        </button>
-                    </div>
 
                     {activeTab === "login" ? (
                         /* Login Form */
@@ -265,6 +246,16 @@ export default function Login() {
                                         className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted-foreground hover:text-white transition-colors"
                                     >
                                         {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                    </button>
+                                </div>
+                                <div className="flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveTab("forgot")}
+                                        className="text-[11px] font-display font-bold tracking-widest uppercase text-muted-foreground hover:text-white transition-all flex items-center gap-1.5 group/forgot"
+                                    >
+                                        Forgot Password?
+                                        <div className={`w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px] group-hover/forgot:${isParamsAdmin ? 'border-magenta-500 text-magenta-500' : 'border-cyan-400 text-cyan-400'} transition-colors`}>?</div>
                                     </button>
                                 </div>
                             </div>
@@ -328,24 +319,42 @@ export default function Login() {
                                             className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all placeholder:text-muted-foreground/50"
                                             required
                                         />
-                                        <input
-                                            type="password"
-                                            value={resetNewPassword}
-                                            onChange={e => setResetNewPassword(e.target.value)}
-                                            placeholder="New Password (min 6 chars)"
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all placeholder:text-muted-foreground/50"
-                                            required
-                                            minLength={6}
-                                        />
-                                        <input
-                                            type="password"
-                                            value={resetConfirmPassword}
-                                            onChange={e => setResetConfirmPassword(e.target.value)}
-                                            placeholder="Confirm New Password"
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all placeholder:text-muted-foreground/50"
-                                            required
-                                            minLength={6}
-                                        />
+                                        <div className="relative">
+                                            <input
+                                                type={showPassword ? "text" : "password"}
+                                                value={resetNewPassword}
+                                                onChange={e => setResetNewPassword(e.target.value)}
+                                                placeholder="New Password (min 8 chars)"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all placeholder:text-muted-foreground/50"
+                                                required
+                                                minLength={8}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted-foreground hover:text-white transition-colors"
+                                            >
+                                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </button>
+                                        </div>
+                                        <div className="relative">
+                                            <input
+                                                type={showPassword ? "text" : "password"}
+                                                value={resetConfirmPassword}
+                                                onChange={e => setResetConfirmPassword(e.target.value)}
+                                                placeholder="Confirm New Password"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all placeholder:text-muted-foreground/50"
+                                                required
+                                                minLength={8}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted-foreground hover:text-white transition-colors"
+                                            >
+                                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </button>
+                                        </div>
                                     </div>
                                     <button
                                         type="submit"
@@ -389,26 +398,40 @@ export default function Login() {
                                         <div className="relative">
                                             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                             <input
-                                                type="password"
+                                                type={showPassword ? "text" : "password"}
                                                 value={studentNewPass}
                                                 onChange={e => setStudentNewPass(e.target.value)}
-                                                placeholder="New Password (min 6 chars)"
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-3 text-sm text-white focus:border-cyan-400 outline-none transition-all placeholder:text-muted-foreground/50"
+                                                placeholder="New Password (min 8 chars)"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-12 text-sm text-white focus:border-cyan-400 outline-none transition-all placeholder:text-muted-foreground/50"
                                                 required
-                                                minLength={6}
+                                                minLength={8}
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted-foreground hover:text-white transition-colors"
+                                            >
+                                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </button>
                                         </div>
                                         <div className="relative">
                                             <CheckCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                             <input
-                                                type="password"
+                                                type={showPassword ? "text" : "password"}
                                                 value={studentConfirmPass}
                                                 onChange={e => setStudentConfirmPass(e.target.value)}
                                                 placeholder="Confirm New Password"
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-3 text-sm text-white focus:border-cyan-400 outline-none transition-all placeholder:text-muted-foreground/50"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-12 text-sm text-white focus:border-cyan-400 outline-none transition-all placeholder:text-muted-foreground/50"
                                                 required
-                                                minLength={6}
+                                                minLength={8}
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute inset-y-0 right-0 pr-4 flex items-center text-muted-foreground hover:text-white transition-colors"
+                                            >
+                                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </button>
                                         </div>
                                     </div>
 
