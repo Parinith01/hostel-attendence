@@ -1,7 +1,7 @@
 import { users, attendance, settings, leaveRequests, type User, type InsertUser, type Attendance, type InsertAttendance, type Settings, type LeaveRequest, type InsertLeaveRequest } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, and, lt, gte } from "drizzle-orm";
+import { eq, and, lt, gte, sql } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -28,6 +28,7 @@ export interface IStorage {
   getLeaveRequestsByUser(userId: string): Promise<LeaveRequest[]>;
   updateLeaveRequestStatus(id: string, status: string, adminNote?: string): Promise<LeaveRequest | undefined>;
   getPendingLeaveRequestForUser(userId: string, monthYear: string): Promise<LeaveRequest | undefined>;
+  getApprovedLeaveByDate(dateStr: string): Promise<LeaveRequest[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -218,6 +219,12 @@ export class MemStorage implements IStorage {
       lr => lr.userId === userId && lr.monthYear === monthYear && lr.status === 'pending'
     );
   }
+
+  async getApprovedLeaveByDate(dateStr: string): Promise<LeaveRequest[]> {
+    return Array.from(this.leaveRequestsStore.values()).filter(lr => 
+      lr.status === 'approved' && lr.startDate <= dateStr && lr.endDate >= dateStr
+    );
+  }
 }
 
 export class DatabaseStorage implements IStorage {
@@ -376,6 +383,17 @@ export class DatabaseStorage implements IStorage {
       and(eq(leaveRequests.userId, userId), eq(leaveRequests.monthYear, monthYear), eq(leaveRequests.status, 'pending'))
     );
     return lr;
+  }
+
+  async getApprovedLeaveByDate(dateStr: string): Promise<LeaveRequest[]> {
+    if (!db) return [];
+    return await db.select().from(leaveRequests).where(
+      and(
+        eq(leaveRequests.status, 'approved'),
+        sql`${leaveRequests.startDate} <= ${dateStr}`,
+        sql`${leaveRequests.endDate} >= ${dateStr}`
+      )
+    );
   }
 }
 

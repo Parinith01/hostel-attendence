@@ -10,6 +10,7 @@ export async function registerRoutes(
   async function getMergedAttendance(dateStr: string) {
     const actual = await storage.getAttendanceByDate(dateStr);
     const ongoing = await storage.getOngoingAbsences(dateStr);
+    const approvedLeave = await storage.getApprovedLeaveByDate(dateStr);
 
     const synthetic: any[] = [];
     ongoing.forEach(abs => {
@@ -18,6 +19,17 @@ export async function registerRoutes(
         synthetic.push({ ...abs, id: abs.id + '-d', date: dateStr, mealType: 'dinner' });
       } else if (dateStr === abs.returnDate && abs.returnMealType === 'dinner') {
         synthetic.push({ ...abs, id: abs.id + '-b', date: dateStr, mealType: 'breakfast' });
+      }
+    });
+
+    approvedLeave.forEach(lr => {
+      if (dateStr < lr.endDate) {
+        synthetic.push({ userId: lr.userId, status: 'absent', absentReason: `Leave: ${lr.reason}`, id: lr.id + '-lb', date: dateStr, mealType: 'breakfast' });
+        synthetic.push({ userId: lr.userId, status: 'absent', absentReason: `Leave: ${lr.reason}`, id: lr.id + '-ld', date: dateStr, mealType: 'dinner' });
+      } else if (dateStr === lr.endDate) {
+        if (lr.returnMealType === 'dinner') {
+          synthetic.push({ userId: lr.userId, status: 'absent', absentReason: `Leave: ${lr.reason}`, id: lr.id + '-lb', date: dateStr, mealType: 'breakfast' });
+        }
       }
     });
 
