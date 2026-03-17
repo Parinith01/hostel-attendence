@@ -1,4 +1,4 @@
-import { users, attendance, settings, type User, type InsertUser, type Attendance, type InsertAttendance, type Settings } from "@shared/schema";
+import { users, attendance, settings, leaveRequests, type User, type InsertUser, type Attendance, type InsertAttendance, type Settings, type LeaveRequest, type InsertLeaveRequest } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, and, lt, gte } from "drizzle-orm";
@@ -20,16 +20,26 @@ export interface IStorage {
   getAttendanceById(id: string): Promise<Attendance | undefined>;
   verifyAttendance(id: string, verified: boolean, sundayToken?: string | null): Promise<Attendance | undefined>;
   deleteAttendance(id: string): Promise<boolean>;
+  getMonthlyAbsentCount(userId: string, monthYear: string): Promise<number>;
+
+  // Leave Requests
+  createLeaveRequest(req: InsertLeaveRequest): Promise<LeaveRequest>;
+  getAllLeaveRequests(): Promise<LeaveRequest[]>;
+  getLeaveRequestsByUser(userId: string): Promise<LeaveRequest[]>;
+  updateLeaveRequestStatus(id: string, status: string, adminNote?: string): Promise<LeaveRequest | undefined>;
+  getPendingLeaveRequestForUser(userId: string, monthYear: string): Promise<LeaveRequest | undefined>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private attendances: Map<string, Attendance>;
   private settingsConfig: Settings;
+  private leaveRequestsStore: Map<string, LeaveRequest>;
 
   constructor() {
     this.users = new Map();
     this.attendances = new Map();
+    this.leaveRequestsStore = new Map();
     this.settingsConfig = { id: 'default', breakfastStart: '06:00', breakfastEnd: '09:00', dinnerStart: '18:00', dinnerEnd: '22:00' };
 
     // Seed an admin user
@@ -158,6 +168,56 @@ export class MemStorage implements IStorage {
   async deleteAttendance(id: string): Promise<boolean> {
     return this.attendances.delete(id);
   }
+
+  async getMonthlyAbsentCount(userId: string, monthYear: string): Promise<number> {
+    return Array.from(this.attendances.values()).filter(a =>
+      a.userId === userId && a.status === 'absent' && a.date.startsWith(monthYear)
+    ).length;
+  }
+
+  async createLeaveRequest(req: InsertLeaveRequest): Promise<LeaveRequest> {
+    const id = randomUUID();
+    const lr: LeaveRequest = {
+      id,
+      userId: req.userId,
+      reason: req.reason,
+      startDate: req.startDate,
+      endDate: req.endDate,
+      returnMealType: req.returnMealType,
+      status: 'pending',
+      adminNote: null,
+      timestamp: req.timestamp,
+      monthYear: req.monthYear,
+    };
+    this.leaveRequestsStore.set(id, lr);
+    return lr;
+  }
+
+  async getAllLeaveRequests(): Promise<LeaveRequest[]> {
+    return Array.from(this.leaveRequestsStore.values()).sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }
+
+  async getLeaveRequestsByUser(userId: string): Promise<LeaveRequest[]> {
+    return Array.from(this.leaveRequestsStore.values())
+      .filter(lr => lr.userId === userId)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+
+  async updateLeaveRequestStatus(id: string, status: string, adminNote?: string): Promise<LeaveRequest | undefined> {
+    const lr = this.leaveRequestsStore.get(id);
+    if (!lr) return undefined;
+    const updated = { ...lr, status, adminNote: adminNote ?? lr.adminNote };
+    this.leaveRequestsStore.set(id, updated);
+    return updated;
+  }
+
+  async getPendingLeaveRequestForUser(userId: string, monthYear: string): Promise<LeaveRequest | undefined> {
+    return Array.from(this.leaveRequestsStore.values()).find(
+      lr => lr.userId === userId && lr.monthYear === monthYear && lr.status === 'pending'
+    );
+  }
 }
 
 export class DatabaseStorage implements IStorage {
@@ -273,6 +333,49 @@ export class DatabaseStorage implements IStorage {
     if (!db) return false;
     await db.delete(attendance).where(eq(attendance.id, id));
     return true;
+  }
+
+  async getMonthlyAbsentCount(userId: string, monthYear: string): Promise<number> {
+    if (!db) return 0;
+    // Count distinct absence records where date starts with monthYear
+    const rows = await db.select().from(attendance).where(
+      and(eq(attendance.userId, userId), eq(attendance.status, 'absent'))
+    );
+    return rows.filter(r => r.date.startsWith(monthYear)).length;
+  }
+
+  async createLeaveRequest(req: InsertLeaveRequest): Promise<LeaveRequest> {
+    if (!db) throw new Error("DB not connected");
+    const [lr] = await db.insert(leaveRequests).values(req).returning();
+    return lr;
+  }
+
+  async getAllLeaveRequests(): Promise<LeaveRequest[]> {
+    if (!db) return [];
+    const rows = await db.select().from(leaveRequests);
+    return rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+
+  async getLeaveRequestsByUser(userId: string): Promise<LeaveRequest[]> {
+    if (!db) return [];
+    const rows = await db.select().from(leaveRequests).where(eq(leaveRequests.userId, userId));
+    return rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }
+
+  async updateLeaveRequestStatus(id: string, status: string, adminNote?: string): Promise<LeaveRequest | undefined> {
+    if (!db) return undefined;
+    const updateData: any = { status };
+    if (adminNote !== undefined) updateData.adminNote = adminNote;
+    const [lr] = await db.update(leaveRequests).set(updateData).where(eq(leaveRequests.id, id)).returning();
+    return lr;
+  }
+
+  async getPendingLeaveRequestForUser(userId: string, monthYear: string): Promise<LeaveRequest | undefined> {
+    if (!db) return undefined;
+    const [lr] = await db.select().from(leaveRequests).where(
+      and(eq(leaveRequests.userId, userId), eq(leaveRequests.monthYear, monthYear), eq(leaveRequests.status, 'pending'))
+    );
+    return lr;
   }
 }
 

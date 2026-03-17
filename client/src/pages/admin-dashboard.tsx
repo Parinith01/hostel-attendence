@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Download, Settings as SettingsIcon, Save, Eye, X, Trash2, XOctagon, UserCheck } from "lucide-react";
+import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Download, Settings as SettingsIcon, Save, Eye, X, Trash2, XOctagon, UserCheck, Lock, ClipboardList, CheckCheck, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -27,6 +27,19 @@ type Attendance = {
     returnMealType: string | null;
 };
 
+type LeaveRequest = {
+    id: string;
+    userId: string;
+    reason: string;
+    startDate: string;
+    endDate: string;
+    returnMealType: string;
+    status: 'pending' | 'approved' | 'rejected';
+    adminNote: string | null;
+    timestamp: string;
+    monthYear: string;
+};
+
 type DashboardData = {
     date: string;
     students: Student[];
@@ -49,6 +62,7 @@ export default function AdminDashboard() {
 
     const [data, setData] = useState<DashboardData | null>(null);
     const [settings, setSettings] = useState<SettingsData>({ breakfastStart: '06:00', breakfastEnd: '09:00', dinnerStart: '18:00', dinnerEnd: '22:00' });
+    const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(todayIST);
     const [savingSettings, setSavingSettings] = useState(false);
@@ -57,22 +71,33 @@ export default function AdminDashboard() {
     const [cancellingAbsence, setCancellingAbsence] = useState<Attendance | null>(null);
     const [cancelReason, setCancelReason] = useState("");
     const [markingPresent, setMarkingPresent] = useState(false);
+    const [activeTab, setActiveTab] = useState<"dashboard" | "leave" | "password">("dashboard");
+    const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
+    
+    // For approving/rejecting leave
+    const [processingLeaveId, setProcessingLeaveId] = useState<string | null>(null);
+    const [adminNote, setAdminNote] = useState("");
+    const [showLeaveModal, setShowLeaveModal] = useState<LeaveRequest | null>(null);
+
     const { toast } = useToast();
 
     const fetchDashboard = async (dateStr?: string) => {
         setLoading(true);
         try {
             const dateParam = dateStr || selectedDate;
-            const [dashRes, setRes] = await Promise.all([
+            const [dashRes, setRes, leaveRes] = await Promise.all([
                 fetch(`/api/admin/dashboard?date=${dateParam}`),
-                fetch("/api/settings")
+                fetch("/api/settings"),
+                fetch("/api/admin/leave-requests")
             ]);
 
             const dashJson = await dashRes.json();
             const setJson = await setRes.json();
+            const leaveJson = await leaveRes.json();
 
             setData(dashJson);
             setSettings(setJson);
+            setLeaveRequests(leaveJson);
         } catch (e: any) {
             console.error("Dashboard fetch error:", e);
             toast({
@@ -100,6 +125,34 @@ export default function AdminDashboard() {
             toast({ title: 'Error', description: 'Could not remove student.', variant: 'destructive' });
         } finally {
             setDeletingId(null);
+        }
+    };
+
+    const handleLeaveAction = async (id: string, status: 'approved' | 'rejected') => {
+        setProcessingLeaveId(id);
+        try {
+            const res = await fetch(`/api/admin/leave-request/${id}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status, adminNote })
+            });
+
+            if (!res.ok) throw new Error("Failed to update leave request.");
+
+            const updatedLr = await res.json();
+            setLeaveRequests(prev => prev.map(lr => lr.id === id ? updatedLr : lr));
+            setShowLeaveModal(null);
+            setAdminNote("");
+            
+            toast({
+                title: status === 'approved' ? 'Leave Approved' : 'Leave Rejected',
+                description: `Request has been marked as ${status}.`,
+                className: status === 'approved' ? "bg-green-600/20 text-green-300 border-green-500" : "bg-red-600/20 text-red-300 border-red-500",
+            });
+        } catch (err: any) {
+            toast({ title: "Error", description: err.message, variant: "destructive" });
+        } finally {
+            setProcessingLeaveId(null);
         }
     };
 
@@ -181,6 +234,48 @@ export default function AdminDashboard() {
             });
         } finally {
             setSavingSettings(false);
+        }
+    };
+
+    const handleChangePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (passwordData.new !== passwordData.confirm) {
+            toast({ title: "Error", description: "New passwords do not match.", variant: "destructive" });
+            return;
+        }
+        if (passwordData.new.length < 6) {
+            toast({ title: "Error", description: "Password must be at least 6 characters.", variant: "destructive" });
+            return;
+        }
+
+        const storedUser = localStorage.getItem("user");
+        if (!storedUser) return;
+        const user = JSON.parse(storedUser);
+
+        setLoading(true);
+        try {
+            const res = await fetch("/api/change-password", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userId: user.userId,
+                    currentPassword: passwordData.current,
+                    newPassword: passwordData.new
+                })
+            });
+
+            if (!res.ok) {
+                const error = await res.json();
+                throw new Error(error.message || "Failed to change password.");
+            }
+
+            toast({ title: "Success", description: "Password changed successfully.", className: "bg-green-500 text-white" });
+            setPasswordData({ current: "", new: "", confirm: "" });
+            setActiveTab("dashboard");
+        } catch (err: any) {
+            toast({ title: "Error", description: err.message, variant: "destructive" });
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -374,6 +469,62 @@ export default function AdminDashboard() {
                 </div>
             )}
 
+            {/* Leave Approval Modal */}
+            {showLeaveModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="glass-card w-full max-w-md p-6 rounded-2xl border border-orange-500/30 shadow-2xl animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <ClipboardList className="w-6 h-6 text-orange-400" />
+                            <h2 className="font-display text-lg font-bold tracking-widest text-orange-400 uppercase">Manage Leave Request</h2>
+                        </div>
+                        <div className="space-y-4 mb-6">
+                            <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                                <p className="text-xs text-white/50 uppercase tracking-widest">Student Info</p>
+                                <p className="text-sm font-bold text-white">UserID: {showLeaveModal.userId}</p>
+                                <p className="text-xs text-white/80">Requested Dates: <span className="text-orange-300">{showLeaveModal.startDate}</span> to <span className="text-orange-300">{showLeaveModal.endDate}</span></p>
+                                <p className="text-xs text-white/80 italic mt-2">"{showLeaveModal.reason}"</p>
+                            </div>
+                            
+                            <div>
+                                <label className="text-[10px] font-display tracking-widest text-white/50 uppercase mb-1 block">Admin Note (optional)</label>
+                                <textarea
+                                    value={adminNote}
+                                    onChange={e => setAdminNote(e.target.value)}
+                                    placeholder="Add any feedback for the student..."
+                                    className="w-full p-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-muted-foreground resize-none text-sm focus:border-orange-500 outline-none"
+                                    rows={2}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => handleLeaveAction(showLeaveModal.id, 'approved')}
+                                    disabled={!!processingLeaveId}
+                                    className="flex-1 py-3 rounded-xl bg-green-500 hover:bg-green-400 text-black font-display tracking-widest font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                                >
+                                    <CheckCheck className="w-4 h-4" /> {processingLeaveId === showLeaveModal.id ? '...' : 'APPROVE'}
+                                </button>
+                                <button
+                                    onClick={() => handleLeaveAction(showLeaveModal.id, 'rejected')}
+                                    disabled={!!processingLeaveId}
+                                    className="flex-1 py-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 font-display tracking-widest font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                                >
+                                    <XCircle className="w-4 h-4" /> {processingLeaveId === showLeaveModal.id ? '...' : 'REJECT'}
+                                </button>
+                            </div>
+                            <button
+                                onClick={() => { setShowLeaveModal(null); setAdminNote(""); }}
+                                className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-muted-foreground font-display tracking-widest text-[10px] uppercase transition-all"
+                            >
+                                CLOSE
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Students Modal */}
             {showStudentsModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -433,203 +584,367 @@ export default function AdminDashboard() {
             )}
 
             <div className="max-w-6xl mx-auto relative z-10 space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                {/* Tab Navigation */}
+                <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 w-full max-w-lg mx-auto">
+                    <button
+                        onClick={() => setActiveTab("dashboard")}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-display font-bold tracking-widest uppercase transition-all ${activeTab === "dashboard" ? "bg-magenta-500 text-white shadow-[0_0_10px_rgba(236,72,153,0.3)]" : "text-muted-foreground hover:text-white"}`}
+                    >
+                        <Users className="w-4 h-4" /> Dashboard
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("leave")}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-display font-bold tracking-widest uppercase transition-all relative ${activeTab === "leave" ? "bg-orange-500 text-white shadow-[0_0_10px_rgba(249,115,22,0.3)]" : "text-muted-foreground hover:text-white"}`}
+                    >
+                        <ClipboardList className="w-4 h-4" /> Leave
+                        {leaveRequests.some(lr => lr.status === 'pending') && (
+                            <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] animate-pulse" />
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("password")}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-display font-bold tracking-widest uppercase transition-all ${activeTab === "password" ? "bg-cyan-500 text-white shadow-[0_0_10px_rgba(34,211,238,0.3)]" : "text-muted-foreground hover:text-white"}`}
+                    >
+                        <Lock className="w-4 h-4" /> Password
+                    </button>
+                </div>
 
-                {/* Header */}
-                <div className="glass-card p-4 sm:p-6 rounded-2xl flex flex-col gap-4 border border-magenta-500/20 shadow-[0_0_30px_rgba(236,72,153,0.1)]">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-magenta-500/10 text-magenta-500 flex items-center justify-center shadow-[0_0_15px_rgba(236,72,153,0.4)] border border-magenta-500/20">
-                                <Users className="w-5 h-5 sm:w-6 sm:h-6" />
-                            </div>
-                                <div>
-                                    <h1 className="font-display text-xl sm:text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-magenta-400 to-purple-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.5)]">
-                                        Admin Dashboard
-                                    </h1>
-                                    <p className="font-display text-magenta-400/80 uppercase tracking-widest text-xs font-semibold mt-0.5 flex gap-2 items-center">
-                                        <CalendarDays className="w-3 h-3" /> {date}
-                                    </p>
+                {activeTab === "dashboard" ? (
+                    <>
+                        {/* Header */}
+                        <div className="glass-card p-4 sm:p-6 rounded-2xl flex flex-col gap-4 border border-magenta-500/20 shadow-[0_0_30px_rgba(236,72,153,0.1)]">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-magenta-500/10 text-magenta-500 flex items-center justify-center shadow-[0_0_15px_rgba(236,72,153,0.4)] border border-magenta-500/20">
+                                        <Users className="w-5 h-5 sm:w-6 sm:h-6" />
+                                    </div>
+                                    <div>
+                                        <h1 className="font-display text-xl sm:text-2xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-magenta-400 to-purple-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.5)]">
+                                            Admin Dashboard
+                                        </h1>
+                                        <p className="font-display text-magenta-400/80 uppercase tracking-widest text-xs font-semibold mt-0.5 flex gap-2 items-center">
+                                            <CalendarDays className="w-3 h-3" /> {date}
+                                        </p>
+                                    </div>
                                 </div>
+                                <Link href="/">
+                                    <span onClick={() => localStorage.removeItem('user')} className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer text-red-400 hover:text-red-300 flex items-center justify-center group shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                                        <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                                    </span>
+                                </Link>
+                            </div>
+
+                            {/* Date Picker Row */}
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                                <span className="text-xs text-white/40 font-display tracking-widest uppercase">Roster Date:</span>
+                                <div className="flex gap-1.5">
+                                    <button
+                                        onClick={() => setSelectedDate(yesterdayIST)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-display tracking-widest border transition-all ${selectedDate === yesterdayIST ? 'bg-purple-500/30 border-purple-400/60 text-purple-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'}`}
+                                    >YESTERDAY</button>
+                                    <button
+                                        onClick={() => setSelectedDate(todayIST)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-display tracking-widest border transition-all ${selectedDate === todayIST ? 'bg-cyan-500/30 border-cyan-400/60 text-cyan-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'}`}
+                                    >TODAY</button>
+                                    <button
+                                        onClick={() => setSelectedDate(tomorrowIST)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-display tracking-widest border transition-all ${selectedDate === tomorrowIST ? 'bg-green-500/30 border-green-400/60 text-green-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'}`}
+                                    >TOMORROW</button>
+                                </div>
+                                <input
+                                    type="date"
+                                    value={selectedDate}
+                                    onChange={e => setSelectedDate(e.target.value)}
+                                    className="ml-auto px-3 py-1.5 rounded-lg text-xs font-mono bg-white/5 border border-white/15 text-white/80 focus:outline-none focus:border-cyan-400/50 transition-colors"
+                                />
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                <button onClick={() => setShowStudentsModal(true)} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-xs font-display tracking-widest">
+                                    <Eye className="w-4 h-4 mr-1.5" /> VIEW STUDENTS
+                                </button>
+                                <button onClick={() => downloadMealPDF('breakfast')} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-xs font-display tracking-widest">
+                                    <Download className="w-4 h-4 mr-1.5 group-hover:-translate-y-1 transition-transform" /> BREAKFAST PDF
+                                </button>
+                                <button onClick={() => downloadMealPDF('dinner')} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/30 text-magenta-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] group text-xs font-display tracking-widest">
+                                    <Download className="w-4 h-4 mr-1.5 group-hover:-translate-y-1 transition-transform" /> DINNER PDF
+                                </button>
+                            </div>
                         </div>
-                        <Link href="/">
-                            <span onClick={() => localStorage.removeItem('user')} className="p-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-colors cursor-pointer text-red-400 hover:text-red-300 flex items-center justify-center group shadow-[0_0_10px_rgba(239,68,68,0.2)]">
-                                <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                            </span>
-                        </Link>
-                    </div>
 
-                    {/* Date Picker Row */}
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                        <span className="text-xs text-white/40 font-display tracking-widest uppercase">Roster Date:</span>
-                        <div className="flex gap-1.5">
-                            <button
-                                onClick={() => setSelectedDate(yesterdayIST)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-display tracking-widest border transition-all ${selectedDate === yesterdayIST ? 'bg-purple-500/30 border-purple-400/60 text-purple-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'}`}
-                            >YESTERDAY</button>
-                            <button
-                                onClick={() => setSelectedDate(todayIST)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-display tracking-widest border transition-all ${selectedDate === todayIST ? 'bg-cyan-500/30 border-cyan-400/60 text-cyan-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'}`}
-                            >TODAY</button>
-                            <button
-                                onClick={() => setSelectedDate(tomorrowIST)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-display tracking-widest border transition-all ${selectedDate === tomorrowIST ? 'bg-green-500/30 border-green-400/60 text-green-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white'}`}
-                            >TOMORROW</button>
+                        {/* Settings Editor */}
+                        <div className="glass-card p-6 rounded-2xl border border-white/10 gap-2">
+                            <h2 className="font-display tracking-widest text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                                <SettingsIcon className="w-5 h-5 text-cyan-400" /> TIME SLOT CONFIGURATION
+                            </h2>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                                <div>
+                                    <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">BREAKFAST START</label>
+                                    <input type="time" value={settings.breakfastStart} onChange={(e) => setSettings({ ...settings, breakfastStart: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">BREAKFAST END</label>
+                                    <input type="time" value={settings.breakfastEnd} onChange={(e) => setSettings({ ...settings, breakfastEnd: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">DINNER START</label>
+                                    <input type="time" value={settings.dinnerStart} onChange={(e) => setSettings({ ...settings, dinnerStart: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">DINNER END</label>
+                                    <input type="time" value={settings.dinnerEnd} onChange={(e) => setSettings({ ...settings, dinnerEnd: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
+                                </div>
+                            </div>
+
+                            <div className="mt-4 flex justify-end">
+                                <button onClick={handleSaveSettings} disabled={savingSettings} className="px-6 py-3 rounded-xl bg-cyan-500 text-white font-bold tracking-wider hover:bg-cyan-400 transition-colors flex items-center gap-2 text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)]">
+                                    {savingSettings ? "SAVING..." : <><Save className="w-4 h-4" /> SAVE TIME SLOTS</>}
+                                </button>
+                            </div>
                         </div>
-                        <input
-                            type="date"
-                            value={selectedDate}
-                            onChange={e => setSelectedDate(e.target.value)}
-                            className="ml-auto px-3 py-1.5 rounded-lg text-xs font-mono bg-white/5 border border-white/15 text-white/80 focus:outline-none focus:border-cyan-400/50 transition-colors"
-                        />
-                    </div>
 
-                    <div className="flex flex-wrap gap-2">
-                        <button onClick={() => setShowStudentsModal(true)} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-xs font-display tracking-widest">
-                            <Eye className="w-4 h-4 mr-1.5" /> VIEW STUDENTS
-                        </button>
-                        <button onClick={() => downloadMealPDF('breakfast')} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-xs font-display tracking-widest">
-                            <Download className="w-4 h-4 mr-1.5 group-hover:-translate-y-1 transition-transform" /> BREAKFAST PDF
-                        </button>
-                        <button onClick={() => downloadMealPDF('dinner')} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/30 text-magenta-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] group text-xs font-display tracking-widest">
-                            <Download className="w-4 h-4 mr-1.5 group-hover:-translate-y-1 transition-transform" /> DINNER PDF
-                        </button>
-                    </div>
-                </div>
+                        {/* Stats Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2 relative overflow-hidden group">
+                                <span className="text-muted-foreground font-display tracking-widest text-sm relative z-10">BREAKFAST PRESENT</span>
+                                <span className="text-4xl font-bold text-white flex items-baseline gap-2 mb-1 relative z-10">
+                                    {breakfastPresent} <span className="text-base text-muted-foreground font-normal">/ {totalStudents}</span>
+                                </span>
+                                <div className="absolute top-0 right-0 -mr-6 -mt-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                                    <Users className="w-32 h-32" />
+                                </div>
+                            </div>
 
-                {/* Settings Editor */}
-                <div className="glass-card p-6 rounded-2xl border border-white/10 gap-2">
-                    <h2 className="font-display tracking-widest text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                        <SettingsIcon className="w-5 h-5 text-cyan-400" /> TIME SLOT CONFIGURATION
-                    </h2>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                            <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">BREAKFAST START</label>
-                            <input type="time" value={settings.breakfastStart} onChange={(e) => setSettings({ ...settings, breakfastStart: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
+                            <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2 relative overflow-hidden group">
+                                <span className="text-muted-foreground font-display tracking-widest text-sm relative z-10">DINNER PRESENT</span>
+                                <span className="text-4xl font-bold text-white flex items-baseline gap-2 mb-1 relative z-10">
+                                    {dinnerPresent} <span className="text-base text-muted-foreground font-normal">/ {totalStudents}</span>
+                                </span>
+                                <div className="absolute top-0 right-0 -mr-6 -mt-6 opacity-5 group-hover:opacity-10 transition-opacity">
+                                    <Users className="w-32 h-32" />
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">BREAKFAST END</label>
-                            <input type="time" value={settings.breakfastEnd} onChange={(e) => setSettings({ ...settings, breakfastEnd: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
-                        </div>
-                        <div>
-                            <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">DINNER START</label>
-                            <input type="time" value={settings.dinnerStart} onChange={(e) => setSettings({ ...settings, dinnerStart: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
-                        </div>
-                        <div>
-                            <label className="text-xs text-muted-foreground font-display tracking-widest mb-1 block">DINNER END</label>
-                            <input type="time" value={settings.dinnerEnd} onChange={(e) => setSettings({ ...settings, dinnerEnd: e.target.value })} className="glass-input w-full p-3 rounded-xl text-white outline-none focus:glow-cyan border border-white/10" />
-                        </div>
-                    </div>
 
-                    <div className="mt-4 flex justify-end">
-                        <button onClick={handleSaveSettings} disabled={savingSettings} className="px-6 py-3 rounded-xl bg-cyan-500 text-white font-bold tracking-wider hover:bg-cyan-400 transition-colors flex items-center gap-2 text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-                            {savingSettings ? "SAVING..." : <><Save className="w-4 h-4" /> SAVE TIME SLOTS</>}
-                        </button>
-                    </div>
-                </div>
+                        {/* Student List */}
+                        <div className="glass-card rounded-2xl border border-white/10 overflow-hidden backdrop-blur-md">
+                            <div className="p-6 border-b border-white/5 bg-white/5 flex justify-between items-center">
+                                <h2 className="font-display tracking-widest text-lg font-semibold text-white">LIVE VERIFICATION ROSTER</h2>
+                            </div>
 
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2 relative overflow-hidden group">
-                        <span className="text-muted-foreground font-display tracking-widest text-sm relative z-10">BREAKFAST PRESENT</span>
-                        <span className="text-4xl font-bold text-white flex items-baseline gap-2 mb-1 relative z-10">
-                            {breakfastPresent} <span className="text-base text-muted-foreground font-normal">/ {totalStudents}</span>
-                        </span>
-                        <div className="absolute top-0 right-0 -mr-6 -mt-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                            <Users className="w-32 h-32" />
-                        </div>
-                    </div>
-
-                    <div className="glass-card p-6 rounded-2xl border border-white/10 flex flex-col gap-2 relative overflow-hidden group">
-                        <span className="text-muted-foreground font-display tracking-widest text-sm relative z-10">DINNER PRESENT</span>
-                        <span className="text-4xl font-bold text-white flex items-baseline gap-2 mb-1 relative z-10">
-                            {dinnerPresent} <span className="text-base text-muted-foreground font-normal">/ {totalStudents}</span>
-                        </span>
-                        <div className="absolute top-0 right-0 -mr-6 -mt-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                            <Users className="w-32 h-32" />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Student List */}
-                <div className="glass-card rounded-2xl border border-white/10 overflow-hidden backdrop-blur-md">
-                    <div className="p-6 border-b border-white/5 bg-white/5 flex justify-between items-center">
-                        <h2 className="font-display tracking-widest text-lg font-semibold text-white">LIVE VERIFICATION ROSTER</h2>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="border-b border-white/5 text-muted-foreground/80 text-sm font-display tracking-wider">
-                                    <th className="p-4 font-normal w-12 text-center">#</th>
-                                    <th className="p-4 font-normal">Student Info</th>
-                                    <th className="p-4 font-normal">Room/Block</th>
-                                    <th className="p-4 font-normal text-center">Breakfast Status</th>
-                                    <th className="p-4 font-normal text-center">Dinner Status</th>
-                                    <th className="p-4 font-normal text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                                {students.map((student, index) => {
-                                    const breakfastMark = attendances.find(a => a.userId === student.userId && a.mealType === 'breakfast');
-                                    const dinnerMark = attendances.find(a => a.userId === student.userId && a.mealType === 'dinner');
-
-                                    return (
-                                        <tr key={student.id} className="hover:bg-white/5 transition-colors">
-                                            <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
-                                            <td className="p-4 whitespace-nowrap">
-                                                <div className="flex flex-col">
-                                                    <span className="font-semibold text-white text-base">{student.fullName}</span>
-                                                    <span className="text-xs text-muted-foreground tracking-wider mt-0.5">{student.userId} | {student.phoneNumber}</span>
-                                                </div>
-                                            </td>
-                                            <td className="p-4 whitespace-nowrap text-muted-foreground">
-                                                {student.roomNumber} - {student.hostelBlock}
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <div className="flex flex-col items-center gap-2">
-                                                    {renderMarkBadge(breakfastMark)}
-                                                    {sundayTokens && sundayTokens[student.userId] && breakfastMark && breakfastMark.status === 'present' && (
-                                                        <div className="inline-flex items-center gap-1 p-1 px-2 rounded bg-cyan-500/10 border border-cyan-500/30 w-max" title="Sunday Breakfast Token">
-                                                            <span className="text-[9px] text-cyan-400 font-mono font-bold">{sundayTokens[student.userId].split(':')[0]}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <div className="flex flex-col items-center gap-2">
-                                                    {renderMarkBadge(dinnerMark)}
-                                                    {sundayTokens && sundayTokens[student.userId] && dinnerMark && dinnerMark.status === 'present' && (
-                                                        <div className="inline-flex items-center gap-1 p-1 px-2 rounded bg-cyan-500/10 border border-cyan-500/30 w-max" title="Sunday Breakfast Token">
-                                                            <span className="text-[9px] text-cyan-400 font-mono font-bold">{sundayTokens[student.userId].split(':')[0]}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="p-4 text-right">
-                                                <button
-                                                    onClick={() => sendWarning(student)}
-                                                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40 transition-colors text-xs font-display tracking-widest font-semibold cursor-pointer"
-                                                >
-                                                    <AlertTriangle className="w-3 h-3" />
-                                                    WARN
-                                                </button>
-                                            </td>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-white/5 text-muted-foreground/80 text-sm font-display tracking-wider">
+                                            <th className="p-4 font-normal w-12 text-center">#</th>
+                                            <th className="p-4 font-normal">Student Info</th>
+                                            <th className="p-4 font-normal">Room/Block</th>
+                                            <th className="p-4 font-normal text-center">Breakfast Status</th>
+                                            <th className="p-4 font-normal text-center">Dinner Status</th>
+                                            <th className="p-4 font-normal text-right">Action</th>
                                         </tr>
-                                    );
-                                })}
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {students.map((student, index) => {
+                                            const breakfastMark = attendances.find(a => a.userId === student.userId && a.mealType === 'breakfast');
+                                            const dinnerMark = attendances.find(a => a.userId === student.userId && a.mealType === 'dinner');
 
-                                {students.length === 0 && (
-                                    <tr>
-                                        <td colSpan={6} className="p-8 text-center text-muted-foreground" style={{ height: '200px' }}>
-                                            No students found in the roster.
-                                        </td>
+                                            return (
+                                                <tr key={student.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
+                                                    <td className="p-4 whitespace-nowrap">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-semibold text-white text-base">{student.fullName}</span>
+                                                            <span className="text-xs text-muted-foreground tracking-wider mt-0.5">{student.userId} | {student.phoneNumber}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4 whitespace-nowrap text-muted-foreground">
+                                                        {student.roomNumber} - {student.hostelBlock}
+                                                    </td>
+                                                    <td className="p-4 text-center">
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            {renderMarkBadge(breakfastMark)}
+                                                            {sundayTokens && sundayTokens[student.userId] && breakfastMark && breakfastMark.status === 'present' && (
+                                                                <div className="inline-flex items-center gap-1 p-1 px-2 rounded bg-cyan-500/10 border border-cyan-500/30 w-max" title="Sunday Breakfast Token">
+                                                                    <span className="text-[9px] text-cyan-400 font-mono font-bold">{sundayTokens[student.userId].split(':')[0]}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4 text-center">
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            {renderMarkBadge(dinnerMark)}
+                                                            {sundayTokens && sundayTokens[student.userId] && dinnerMark && dinnerMark.status === 'present' && (
+                                                                <div className="inline-flex items-center gap-1 p-1 px-2 rounded bg-cyan-500/10 border border-cyan-500/30 w-max" title="Sunday Breakfast Token">
+                                                                    <span className="text-[9px] text-cyan-400 font-mono font-bold">{sundayTokens[student.userId].split(':')[0]}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        <button
+                                                            onClick={() => sendWarning(student)}
+                                                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40 transition-colors text-xs font-display tracking-widest font-semibold cursor-pointer"
+                                                        >
+                                                            <AlertTriangle className="w-3 h-3" />
+                                                            WARN
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+
+                                        {students.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="p-8 text-center text-muted-foreground" style={{ height: '200px' }}>
+                                                    No students found in the roster.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </>
+                ) : activeTab === "leave" ? (
+                    /* Leave Requests List */
+                    <div className="glass-card rounded-2xl border border-white/10 overflow-hidden backdrop-blur-md animate-in fade-in slide-in-from-right-4 duration-300">
+                        <div className="p-6 border-b border-white/5 bg-white/5 flex justify-between items-center">
+                            <div>
+                                <h2 className="font-display tracking-widest text-lg font-semibold text-white">LEAVE APPROVAL QUEUE</h2>
+                                <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest">Manage extended leave requests</p>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b border-white/5 text-muted-foreground/80 text-sm font-display tracking-wider">
+                                        <th className="p-4 font-normal">Student ID</th>
+                                        <th className="p-4 font-normal">Reason</th>
+                                        <th className="p-4 font-normal">Duration</th>
+                                        <th className="p-4 font-normal text-center">Status</th>
+                                        <th className="p-4 font-normal text-right">Actions</th>
                                     </tr>
-                                )}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {leaveRequests.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} className="p-12 text-center text-muted-foreground">No leave requests found.</td>
+                                        </tr>
+                                    ) : (
+                                        leaveRequests.map(lr => (
+                                            <tr key={lr.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="p-4 whitespace-nowrap text-white font-medium">{lr.userId}</td>
+                                                <td className="p-4">
+                                                    <p className="text-xs text-white/70 italic max-w-xs truncate" title={lr.reason}>"{lr.reason}"</p>
+                                                </td>
+                                                <td className="p-4 whitespace-nowrap text-xs text-white/50">
+                                                    <span className="text-orange-400">{lr.startDate}</span> → <span className="text-orange-400">{lr.endDate}</span>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <span className={`text-[10px] font-display font-bold tracking-widest uppercase px-2 py-0.5 rounded-full border flex items-center justify-center gap-1 w-max mx-auto ${lr.status === 'approved' ? 'bg-green-500/20 border-green-500/40 text-green-400' : lr.status === 'rejected' ? 'bg-red-500/20 border-red-500/40 text-red-400' : 'bg-orange-500/20 border-orange-500/40 text-orange-400'}`}>
+                                                        {lr.status === 'approved' ? <CheckCheck className="w-3 h-3" /> : lr.status === 'rejected' ? <XCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                                        {lr.status}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    {lr.status === 'pending' ? (
+                                                        <button
+                                                            onClick={() => setShowLeaveModal(lr)}
+                                                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 hover:border-orange-500/40 transition-colors text-xs font-display tracking-widest font-semibold"
+                                                        >
+                                                            <Send className="w-3 h-3" /> REVIEW
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-[10px] text-muted-foreground font-display uppercase tracking-widest">PROCESSED</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    /* Admin Security Settings */
+                    <div className="glass-card max-w-md mx-auto p-8 rounded-2xl border border-white/10 space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <div className="text-center space-y-2">
+                            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-cyan-500/10 text-cyan-400 glow-cyan mb-2">
+                                <Lock className="w-6 h-6" />
+                            </div>
+                            <h2 className="font-display text-xl font-bold tracking-widest text-white uppercase">Security Settings</h2>
+                            <p className="text-xs text-muted-foreground uppercase tracking-widest">Update your admin credentials</p>
+                        </div>
+
+                        <form onSubmit={handleChangePassword} className="space-y-4">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-display font-bold tracking-[0.2em] text-cyan-400 uppercase">Current Password</label>
+                                <input
+                                    type="password"
+                                    required
+                                    value={passwordData.current}
+                                    onChange={e => setPasswordData({ ...passwordData, current: e.target.value })}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all"
+                                    placeholder="••••••••"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-display font-bold tracking-[0.2em] text-cyan-400 uppercase">New Password</label>
+                                <input
+                                    type="password"
+                                    required
+                                    value={passwordData.new}
+                                    onChange={e => setPasswordData({ ...passwordData, new: e.target.value })}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all"
+                                    placeholder="••••••••"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-display font-bold tracking-[0.2em] text-cyan-400 uppercase">Confirm New Password</label>
+                                <input
+                                    type="password"
+                                    required
+                                    value={passwordData.confirm}
+                                    onChange={e => setPasswordData({ ...passwordData, confirm: e.target.value })}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all"
+                                    placeholder="••••••••"
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white font-display font-bold uppercase tracking-wider text-xs shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-all disabled:opacity-50"
+                            >
+                                {loading ? "Updating..." : "Update Admin Password"}
+                            </button>
+                        </form>
+                    </div>
+                )}
             </div>
         </div>
     );
+}
+
+// Re-using some icons from Lucide
+function Clock(props: any) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  )
 }

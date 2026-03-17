@@ -183,6 +183,120 @@ export async function registerRoutes(
     res.json(user);
   });
 
+  app.post("/api/change-password", async (req, res) => {
+    const { userId, currentPassword, newPassword } = req.body;
+    const user = await storage.getUserByUserId(userId);
+
+    if (!user || user.password !== currentPassword) {
+      return res.status(401).json({ message: "Invalid current password." });
+    }
+
+    await storage.updateUser(user.id, { password: newPassword });
+    res.json({ message: "Password updated successfully." });
+  });
+
+  // Student resets their own password by verifying User ID and Phone Number
+  app.post("/api/student/self-reset-password", async (req, res) => {
+    const { userId, phoneNumber, newPassword } = req.body;
+    if (!userId || !phoneNumber || !newPassword) {
+      return res.status(400).json({ message: "userId, phoneNumber, and newPassword are required." });
+    }
+
+    const user = await storage.getUserByUserId(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Student record not found." });
+    }
+
+    if (user.phoneNumber !== phoneNumber) {
+      return res.status(401).json({ message: "Verification failed. Phone number does not match our records." });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters." });
+    }
+
+    await storage.updateUser(user.id, { password: newPassword });
+    res.json({ message: "Password has been successfully reset. You can now log in." });
+  });
+
+  // Admin resets a student's password directly (no current password needed)
+  app.post("/api/admin/reset-password", async (req, res) => {
+    const { userId, newPassword } = req.body;
+    if (!userId || !newPassword) return res.status(400).json({ message: "userId and newPassword are required." });
+    const user = await storage.getUserByUserId(userId);
+    if (!user) return res.status(404).json({ message: "User not found." });
+    if (newPassword.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters." });
+    await storage.updateUser(user.id, { password: newPassword });
+    res.json({ message: `Password for ${userId} reset successfully.` });
+  });
+
+
+
+  // Get monthly absent count for a student
+  app.get("/api/attendance/monthly-absent-count", async (req, res) => {
+    const { userId, monthYear } = req.query;
+    if (!userId || !monthYear) return res.status(400).json({ message: "userId and monthYear required" });
+    const count = await storage.getMonthlyAbsentCount(String(userId), String(monthYear));
+    res.json({ count });
+  });
+
+  // Student submits a leave request (when monthly limit exceeded)
+  app.post("/api/leave-request", async (req, res) => {
+    const { userId, reason, startDate, endDate, returnMealType } = req.body;
+    if (!userId || !reason || !startDate || !endDate || !returnMealType) {
+      return res.status(400).json({ message: "All fields are required." });
+    }
+    const user = await storage.getUserByUserId(userId);
+    if (!user) return res.status(404).json({ message: "User not found." });
+
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const monthYear = nowIST.getFullYear() + '-' + String(nowIST.getMonth() + 1).padStart(2, '0');
+
+    // Check if already has pending request this month
+    const existing = await storage.getPendingLeaveRequestForUser(userId, monthYear);
+    if (existing) {
+      return res.status(400).json({ message: "You already have a pending leave request for this month." });
+    }
+
+    const lr = await storage.createLeaveRequest({
+      userId,
+      reason,
+      startDate,
+      endDate,
+      returnMealType,
+      monthYear,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(201).json(lr);
+  });
+
+  // Student gets their own leave requests
+  app.get("/api/leave-request", async (req, res) => {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ message: "userId required" });
+    const requests = await storage.getLeaveRequestsByUser(String(userId));
+    res.json(requests);
+  });
+
+  // Admin gets all leave requests
+  app.get("/api/admin/leave-requests", async (req, res) => {
+    const requests = await storage.getAllLeaveRequests();
+    res.json(requests);
+  });
+
+  // Admin approves or rejects a leave request
+  app.post("/api/admin/leave-request/:id", async (req, res) => {
+    const { id } = req.params;
+    const { status, adminNote } = req.body;
+    if (!status || !['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: "Status must be 'approved' or 'rejected'." });
+    }
+    const lr = await storage.updateLeaveRequestStatus(id, status, adminNote);
+    if (!lr) return res.status(404).json({ message: "Leave request not found." });
+    res.json(lr);
+  });
+
+
   app.post("/api/attendance", async (req, res) => {
     const { userId, status, absentReason, returnDate, returnMealType, selectedMealType } = req.body;
     const user = await storage.getUserByUserId(userId);
