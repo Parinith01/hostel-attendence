@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { UtensilsCrossed, ArrowRight, LogOut, CheckCircle, Sunrise, Sunset, AlertTriangle, X, Lock, User as UserIcon, ClipboardList, Send, Clock, CheckCheck, XCircle, CalendarClock } from "lucide-react";
+import { UtensilsCrossed, ArrowRight, LogOut, CheckCircle, Sunrise, Sunset, AlertTriangle, X, Lock, Eye, EyeOff, User as UserIcon, ClipboardList, Send, Clock, CheckCheck, XCircle, CalendarClock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import QRCode from "react-qr-code";
@@ -42,6 +42,8 @@ export default function Dashboard() {
     // Monthly absence tracking
     const [monthlyAbsentCount, setMonthlyAbsentCount] = useState(0);
     const [limitReached, setLimitReached] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [warningsCount, setWarningsCount] = useState(0);
 
     // Leave request states
     const [showLeaveRequestForm, setShowLeaveRequestForm] = useState(false);
@@ -98,6 +100,11 @@ export default function Dashboard() {
                 .then(data => { if (data.token) setSundayToken(data.token); })
                 .catch(err => console.error("Error fetching token:", err));
 
+            fetch(`/api/user/${user.userId}`)
+                .then(res => res.json())
+                .then(data => { if (data.warnings !== undefined) setWarningsCount(data.warnings); })
+                .catch(err => console.error("Error fetching user data:", err));
+
             fetchMonthlyAbsentCount(user.userId);
             fetchLeaveRequests(user.userId);
         }
@@ -133,16 +140,27 @@ export default function Dashboard() {
             return;
         }
 
+        const remaining = MONTHLY_ABSENCE_LIMIT - monthlyAbsentCount;
+
         // If limit reached, show the leave approval option instead
         if (status === "absent" && limitReached) {
             setActiveTab("leave");
             setShowLeaveRequestForm(true);
             toast({
                 title: "Monthly Limit Reached",
-                description: `You've used all ${MONTHLY_ABSENCE_LIMIT} absences this month. Please request admin approval for additional leave.`,
-                className: "bg-orange-500/20 text-orange-300 border-orange-500",
+                description: `You've used all ${MONTHLY_ABSENCE_LIMIT} absences this month. Accessing Admin Approval Queue...`,
+                className: "bg-red-500/20 text-red-300 border-red-500 glow-red",
             });
             return;
+        }
+
+        // Warning threshold logic (starts warning after 5 absences)
+        if (status === "absent" && monthlyAbsentCount >= 5 && monthlyAbsentCount < MONTHLY_ABSENCE_LIMIT) {
+            toast({
+                title: "Absence Warning",
+                description: `You have already used ${monthlyAbsentCount} absences. You only have ${remaining} ${remaining === 1 ? 'chance' : 'chances'} left this month.`,
+                className: "bg-yellow-500/20 text-yellow-300 border-yellow-500 glow-yellow animate-bounce",
+            });
         }
 
         if (status === "absent" && !absentMode) {
@@ -316,7 +334,7 @@ export default function Dashboard() {
     const absencePct = Math.min(100, (monthlyAbsentCount / MONTHLY_ABSENCE_LIMIT) * 100);
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="min-h-[100dvh] flex items-center justify-center p-4">
             {/* Background Orbs */}
             <div className="bg-orb orb-1 fixed"></div>
             <div className="bg-orb orb-2 fixed"></div>
@@ -349,6 +367,19 @@ export default function Dashboard() {
                             Student Portal
                         </p>
                     </div>
+
+                    {/* Active Warnings Banner */}
+                    {warningsCount > 0 && (
+                        <div className="bg-red-500/10 border border-red-500/50 rounded-xl p-4 flex gap-3 items-start animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                            <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
+                            <div>
+                                <h3 className="font-display font-bold text-red-400 uppercase tracking-widest text-sm mb-1">Disciplinary Warning Active</h3>
+                                <p className="text-xs text-red-300/80 leading-relaxed">
+                                    You have received <strong>{warningsCount}</strong> official disciplinary warning{warningsCount > 1 ? 's' : ''} from the administration. Please meet with the warden immediately. Further violations may result in suspension.
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Monthly Absence Tracker Bar */}
                     <div className={`p-3 rounded-xl border ${limitReached ? 'bg-red-500/10 border-red-500/40' : absencesLeft <= 2 ? 'bg-orange-500/10 border-orange-500/30' : 'bg-white/5 border-white/10'}`}>
@@ -686,36 +717,63 @@ export default function Dashboard() {
                             <form onSubmit={handleChangePassword} className="space-y-4">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-display font-bold tracking-[0.2em] text-magenta-400 uppercase">Current Password</label>
-                                    <input
-                                        type="password"
-                                        required
-                                        value={passwordData.current}
-                                        onChange={e => setPasswordData({ ...passwordData, current: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-magenta-500 focus:outline-none transition-all"
-                                        placeholder="••••••••"
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            required
+                                            value={passwordData.current}
+                                            onChange={e => setPasswordData({ ...passwordData, current: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-magenta-500 focus:outline-none transition-all"
+                                            placeholder="••••••••"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                                        >
+                                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-display font-bold tracking-[0.2em] text-magenta-400 uppercase">New Password</label>
-                                    <input
-                                        type="password"
-                                        required
-                                        value={passwordData.new}
-                                        onChange={e => setPasswordData({ ...passwordData, new: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-magenta-500 focus:outline-none transition-all"
-                                        placeholder="••••••••"
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            required
+                                            value={passwordData.new}
+                                            onChange={e => setPasswordData({ ...passwordData, new: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-magenta-500 focus:outline-none transition-all"
+                                            placeholder="••••••••"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                                        >
+                                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-display font-bold tracking-[0.2em] text-magenta-400 uppercase">Confirm New Password</label>
-                                    <input
-                                        type="password"
-                                        required
-                                        value={passwordData.confirm}
-                                        onChange={e => setPasswordData({ ...passwordData, confirm: e.target.value })}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-magenta-500 focus:outline-none transition-all"
-                                        placeholder="••••••••"
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            required
+                                            value={passwordData.confirm}
+                                            onChange={e => setPasswordData({ ...passwordData, confirm: e.target.value })}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-magenta-500 focus:outline-none transition-all"
+                                            placeholder="••••••••"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                                        >
+                                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
                                 </div>
                                 <button
                                     type="submit"

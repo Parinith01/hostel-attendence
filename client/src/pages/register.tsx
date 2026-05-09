@@ -103,7 +103,7 @@ export default function Register() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 py-10">
+        <div className="min-h-[100dvh] flex items-center justify-center p-4 py-10">
             {/* Background Orbs */}
             <div className="bg-orb orb-1"></div>
             <div className="bg-orb orb-2"></div>

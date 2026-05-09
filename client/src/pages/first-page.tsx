@@ -3,7 +3,7 @@ import { User, ShieldUser, UserPlus } from "lucide-react";
 
 export default function FirstPage() {
     return (
-        <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="min-h-[100dvh] flex items-center justify-center p-4">
             {/* Background Orbs */}
             <div className="bg-orb orb-1"></div>
             <div className="bg-orb orb-2"></div>

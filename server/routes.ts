@@ -143,6 +143,33 @@ export async function registerRoutes(
     res.json({ message: "Student removed successfully." });
   });
 
+  // Admin: Send a warning to a student (increments warning counter)
+  app.post("/api/admin/warn-student", async (req, res) => {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ message: "userId is required." });
+    const user = await storage.getUserByUserId(userId);
+    if (!user) return res.status(404).json({ message: "Student not found." });
+    
+    const currentWarnings = user.warnings || 0;
+    const updated = await storage.updateUser(user.id, { warnings: currentWarnings + 1 });
+    
+    res.json({ message: `Warning issued successfully to ${user.fullName}. They now have ${currentWarnings + 1} warnings.`, user: updated });
+  });
+
+  // Admin: Remove a warning from a student (decrements warning counter)
+  app.post("/api/admin/remove-warning", async (req, res) => {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ message: "userId is required." });
+    const user = await storage.getUserByUserId(userId);
+    if (!user) return res.status(404).json({ message: "Student not found." });
+    
+    const currentWarnings = user.warnings || 0;
+    if (currentWarnings <= 0) return res.status(400).json({ message: "Student has no warnings to remove." });
+    
+    const updated = await storage.updateUser(user.id, { warnings: currentWarnings - 1 });
+    res.json({ message: `Warning removed successfully from ${user.fullName}. They now have ${currentWarnings - 1} warnings.`, user: updated });
+  });
+
   // Admin: Cancel/remove an absence record so student can re-vote
   app.delete("/api/admin/attendance/:id", async (req, res) => {
     const { id } = req.params;
@@ -205,6 +232,13 @@ export async function registerRoutes(
 
     await storage.updateUser(user.id, { password: newPassword });
     res.json({ message: "Password updated successfully." });
+  });
+
+  app.get("/api/user/:userId", async (req, res) => {
+    const { userId } = req.params;
+    const user = await storage.getUserByUserId(userId);
+    if (!user) return res.status(404).json({ message: "User not found." });
+    res.json({ warnings: user.warnings });
   });
 
   // Student resets their own password by verifying User ID and Phone Number

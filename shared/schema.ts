@@ -12,6 +12,7 @@ export const users = pgTable("users", {
   roomNumber: text("room_number"),
   hostelBlock: text("hostel_block"),
   role: text("role").notNull().default("student"),
+  warnings: integer("warnings").notNull().default(0),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -22,6 +23,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   roomNumber: true,
   hostelBlock: true,
   role: true,
+  warnings: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

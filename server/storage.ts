@@ -87,6 +87,7 @@ export class MemStorage implements IStorage {
       roomNumber: updateData.roomNumber ?? user.roomNumber,
       hostelBlock: updateData.hostelBlock ?? user.hostelBlock,
       role: updateData.role ?? user.role,
+      warnings: updateData.warnings ?? user.warnings,
     };
     this.users.set(id, updatedUser);
     return updatedUser;

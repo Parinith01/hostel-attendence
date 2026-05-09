@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Download, Settings as SettingsIcon, Save, Eye, X, Trash2, XOctagon, UserCheck, Lock, ClipboardList, CheckCheck, Send } from "lucide-react";
+import { Users, LogOut, CheckCircle, XCircle, AlertTriangle, CalendarDays, Download, Settings as SettingsIcon, Save, Eye, EyeOff, X, Trash2, XOctagon, UserCheck, Lock, ClipboardList, CheckCheck, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -12,6 +12,7 @@ type Student = {
     phoneNumber: string;
     roomNumber: string;
     hostelBlock: string;
+    warnings?: number;
 };
 
 type Attendance = {
@@ -67,6 +68,7 @@ export default function AdminDashboard() {
     const [selectedDate, setSelectedDate] = useState(todayIST);
     const [savingSettings, setSavingSettings] = useState(false);
     const [showStudentsModal, setShowStudentsModal] = useState(false);
+    const [studentSearchQuery, setStudentSearchQuery] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [cancellingAbsence, setCancellingAbsence] = useState<Attendance | null>(null);
     const [cancelReason, setCancelReason] = useState("");
@@ -78,6 +80,7 @@ export default function AdminDashboard() {
     const [processingLeaveId, setProcessingLeaveId] = useState<string | null>(null);
     const [adminNote, setAdminNote] = useState("");
     const [showLeaveModal, setShowLeaveModal] = useState<LeaveRequest | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
 
     const { toast } = useToast();
 
@@ -346,12 +349,59 @@ export default function AdminDashboard() {
         doc.save(`${mealName}_Attendance_${data.date}.pdf`);
     };
 
-    const sendWarning = (student: Student) => {
-        toast({
-            title: "Warning Sent",
-            description: `Disciplinary warning has been sent to ${student.fullName} (${student.userId}).`,
-            variant: "destructive",
-        });
+    const sendWarning = async (student: Student) => {
+        try {
+            const res = await fetch("/api/admin/warn-student", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: student.userId })
+            });
+            const result = await res.json();
+            if (res.ok) {
+                toast({
+                    title: "Warning Sent",
+                    description: result.message,
+                    variant: "destructive",
+                });
+                fetchDashboard(); // Refresh to update the warning count
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (e: any) {
+            toast({
+                title: "Error",
+                description: e.message || "Failed to issue warning.",
+                variant: "destructive",
+            });
+        }
+    };
+
+    const removeWarning = async (student: Student) => {
+        if (!confirm(`Remove a warning from ${student.fullName}?`)) return;
+        try {
+            const res = await fetch("/api/admin/remove-warning", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: student.userId })
+            });
+            const result = await res.json();
+            if (res.ok) {
+                toast({
+                    title: "Warning Removed",
+                    description: result.message,
+                    className: "bg-green-600/20 text-green-300 border-green-500",
+                });
+                fetchDashboard(); // Refresh to update the warning count
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (e: any) {
+            toast({
+                title: "Error",
+                description: e.message || "Failed to remove warning.",
+                variant: "destructive",
+            });
+        }
     };
 
     const renderMarkBadge = (mark: Attendance | undefined) => {
@@ -405,7 +455,7 @@ export default function AdminDashboard() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center p-4">
+            <div className="min-h-[100dvh] flex items-center justify-center p-4">
                 <div className="w-10 h-10 border-4 border-magenta-500/30 border-t-magenta-500 rounded-full animate-spin"></div>
             </div>
         );
@@ -420,7 +470,7 @@ export default function AdminDashboard() {
     const dinnerPresent = attendances.filter(a => a.mealType === "dinner" && a.status === "present").length;
 
     return (
-        <div className="min-h-screen p-3 sm:p-6 lg:p-8 relative">
+        <div className="min-h-[100dvh] p-3 sm:p-6 lg:p-8 relative">
             {/* Background Orbs */}
             <div className="bg-orb orb-1 fixed"></div>
             <div className="bg-orb orb-2 fixed"></div>
@@ -529,14 +579,23 @@ export default function AdminDashboard() {
             {showStudentsModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="glass-card w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl border border-white/20 overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-200">
-                        <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+                        <div className="p-6 border-b border-white/10 flex flex-col sm:flex-row gap-4 sm:justify-between sm:items-center bg-white/5">
                             <div>
                                 <h2 className="font-display tracking-widest text-xl font-bold text-white uppercase">Registered Students List</h2>
                                 <p className="text-sm text-muted-foreground mt-1">Total Active Directory: {totalStudents} Students</p>
                             </div>
-                            <button onClick={() => setShowStudentsModal(false)} className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition">
-                                <X className="w-6 h-6" />
-                            </button>
+                            <div className="flex items-center gap-4">
+                                <input
+                                    type="text"
+                                    placeholder="Search by name, ID, or room..."
+                                    value={studentSearchQuery}
+                                    onChange={e => setStudentSearchQuery(e.target.value)}
+                                    className="glass-input px-4 py-2 rounded-xl text-sm w-full sm:w-64 border border-white/10"
+                                />
+                                <button onClick={() => setShowStudentsModal(false)} className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
                         </div>
                         <div className="overflow-auto p-0 flex-1">
                             <table className="w-full text-left border-collapse">
@@ -552,10 +611,32 @@ export default function AdminDashboard() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {students.map((s, index) => (
+                                    {students.filter(s => 
+                                        s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
+                                        s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                                        (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
+                                    ).map((s, index) => (
                                         <tr key={s.id} className="hover:bg-white/5 transition-colors">
                                             <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
-                                            <td className="p-4 text-white font-medium whitespace-nowrap">{s.fullName}</td>
+                                            <td className="p-4 text-white font-medium whitespace-nowrap">
+                                                <div className="flex items-center gap-2">
+                                                    {s.fullName}
+                                                    {s.warnings && s.warnings > 0 ? (
+                                                        <div className="flex items-center bg-red-500/20 rounded-full border border-red-500/30">
+                                                            <span className="text-red-400 text-[10px] px-2 py-0.5">
+                                                                {s.warnings} Warning{s.warnings > 1 ? 's' : ''}
+                                                            </span>
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); removeWarning(s); }}
+                                                                className="pr-1.5 pl-0.5 py-0.5 text-red-400/50 hover:text-red-300 hover:bg-red-500/10 rounded-r-full transition-colors"
+                                                                title="Remove Warning"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            </td>
                                             <td className="p-4 text-cyan-400 whitespace-nowrap">{s.userId}</td>
                                             <td className="p-4 text-white/80 whitespace-nowrap">{s.phoneNumber}</td>
                                             <td className="p-4 text-magenta-300 font-medium">{s.roomNumber}</td>
@@ -571,9 +652,13 @@ export default function AdminDashboard() {
                                             </td>
                                         </tr>
                                     ))}
-                                    {students.length === 0 && (
+                                    {students.filter(s => 
+                                        s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
+                                        s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                                        (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
+                                    ).length === 0 && (
                                         <tr>
-                                            <td colSpan={6} className="p-8 text-center text-muted-foreground">No students registered yet.</td>
+                                            <td colSpan={7} className="p-8 text-center text-muted-foreground">No students found.</td>
                                         </tr>
                                     )}
                                 </tbody>
@@ -755,7 +840,23 @@ export default function AdminDashboard() {
                                                     <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
                                                     <td className="p-4 whitespace-nowrap">
                                                         <div className="flex flex-col">
-                                                            <span className="font-semibold text-white text-base">{student.fullName}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-semibold text-white text-base">{student.fullName}</span>
+                                                                {student.warnings && student.warnings > 0 ? (
+                                                                    <div className="flex items-center bg-red-500/20 rounded-full border border-red-500/30">
+                                                                        <span className="text-red-400 text-[10px] px-2 py-0.5">
+                                                                            {student.warnings} Warning{student.warnings > 1 ? 's' : ''}
+                                                                        </span>
+                                                                        <button 
+                                                                            onClick={(e) => { e.stopPropagation(); removeWarning(student); }}
+                                                                            className="pr-1.5 pl-0.5 py-0.5 text-red-400/50 hover:text-red-300 hover:bg-red-500/10 rounded-r-full transition-colors"
+                                                                            title="Remove Warning"
+                                                                        >
+                                                                            <X className="w-3 h-3" />
+                                                                        </button>
+                                                                    </div>
+                                                                ) : null}
+                                                            </div>
                                                             <span className="text-xs text-muted-foreground tracking-wider mt-0.5">{student.userId} | {student.phoneNumber}</span>
                                                         </div>
                                                     </td>
@@ -882,36 +983,63 @@ export default function AdminDashboard() {
                         <form onSubmit={handleChangePassword} className="space-y-4">
                             <div className="space-y-1">
                                 <label className="text-[10px] font-display font-bold tracking-[0.2em] text-cyan-400 uppercase">Current Password</label>
-                                <input
-                                    type="password"
-                                    required
-                                    value={passwordData.current}
-                                    onChange={e => setPasswordData({ ...passwordData, current: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all"
-                                    placeholder="••••••••"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type={showPassword ? "text" : "password"}
+                                        required
+                                        value={passwordData.current}
+                                        onChange={e => setPasswordData({ ...passwordData, current: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all"
+                                        placeholder="••••••••"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                                    >
+                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-[10px] font-display font-bold tracking-[0.2em] text-cyan-400 uppercase">New Password</label>
-                                <input
-                                    type="password"
-                                    required
-                                    value={passwordData.new}
-                                    onChange={e => setPasswordData({ ...passwordData, new: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all"
-                                    placeholder="••••••••"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type={showPassword ? "text" : "password"}
+                                        required
+                                        value={passwordData.new}
+                                        onChange={e => setPasswordData({ ...passwordData, new: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all"
+                                        placeholder="••••••••"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                                    >
+                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-[10px] font-display font-bold tracking-[0.2em] text-cyan-400 uppercase">Confirm New Password</label>
-                                <input
-                                    type="password"
-                                    required
-                                    value={passwordData.confirm}
-                                    onChange={e => setPasswordData({ ...passwordData, confirm: e.target.value })}
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all"
-                                    placeholder="••••••••"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type={showPassword ? "text" : "password"}
+                                        required
+                                        value={passwordData.confirm}
+                                        onChange={e => setPasswordData({ ...passwordData, confirm: e.target.value })}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-cyan-400 focus:outline-none transition-all"
+                                        placeholder="••••••••"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                                    >
+                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
                             </div>
                             <button
                                 type="submit"
