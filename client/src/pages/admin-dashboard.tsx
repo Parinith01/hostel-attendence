@@ -571,7 +571,7 @@ export default function AdminDashboard() {
 
     const { students, attendances, date, sundayTokens } = data;
 
-    const totalStudents = students.length;
+    const totalStudents = students.filter(s => s.isApproved).length;
     const breakfastPresent = attendances.filter(a => a.mealType === "breakfast" && a.status === "present").length;
     const dinnerPresent = attendances.filter(a => a.mealType === "dinner" && a.status === "present").length;
 
