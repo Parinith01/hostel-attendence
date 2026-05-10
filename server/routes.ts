@@ -268,9 +268,9 @@ export async function registerRoutes(
     // Clean phone number: Remove +91, spaces, dashes, etc.
     const cleanPhone = user.phoneNumber.replace(/\D/g, '').slice(-10);
 
-    // REAL SMS INTEGRATION - FAST2SMS v3 API
+    // REAL SMS INTEGRATION - FAST2SMS OTP Route (Cheap & Instant)
     try {
-      console.log(`[Fast2SMS] Sending OTP to ${cleanPhone} via v3 API...`);
+      console.log(`[Fast2SMS] Sending Instant OTP to ${cleanPhone}...`);
       
       const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
         method: "POST",
@@ -286,19 +286,19 @@ export async function registerRoutes(
       });
 
       const result = await response.json();
-      console.log(`[Fast2SMS] Full Response:`, result);
+      console.log(`[Fast2SMS] Response:`, result);
 
       if (!result.return) {
-        // If money is in "Wallet", we might need the "q" route as fallback
-        console.log("[Fast2SMS] OTP route failed, trying Quick SMS fallback...");
+        // Fallback to Quick SMS only if OTP fails
+        console.warn("[Fast2SMS] OTP route rejected, using Quick SMS fallback...");
         await fetch(`https://www.fast2sms.com/dev/bulkV2?authorization=Q6jXHSCpTzRMfos2ZNcBetxguOmdyklh9DU53YiGWq1Vw8AEPrdeWMh9iCIcVuxO8o371bUJfaXvpQLl&route=q&message=${encodeURIComponent(`Your OTP is ${otp}`)}&flash=0&numbers=${cleanPhone}`);
       }
     } catch (err: any) {
-      console.error("Fast2SMS Critical Error:", err.message);
+      console.error("Fast2SMS Error:", err.message);
     }
 
-    // Always log the code for the admin in the server console just in case
-    console.log(`\n\n>> VERIFICATION CODE FOR ${user.fullName}: ${otp} <<\n\n`);
+    // Always log for the admin
+    console.log(`\n\n>> VERIFICATION CODE: ${otp} <<\n\n`);
 
     res.json({ message: "OTP sent successfully to registered mobile number." });
   });
