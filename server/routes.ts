@@ -267,25 +267,38 @@ export async function registerRoutes(
 
     // Clean phone number: Remove +91, spaces, dashes, etc.
     const cleanPhone = user.phoneNumber.replace(/\D/g, '').slice(-10);
-    const message = `Your JSS Hostel OTP is ${otp}. Please do not share this with anyone.`;
 
-    // REAL SMS INTEGRATION with Fast2SMS (Using GET method for better reliability)
+    // REAL SMS INTEGRATION - FAST2SMS v3 API
     try {
-      console.log(`[Fast2SMS] Sending Quick SMS to ${cleanPhone}...`);
-      const url = `https://www.fast2sms.com/dev/bulkV2?authorization=Q6jXHSCpTzRMfos2ZNcBetxguOmdyklh9DU53YiGWq1Vw8AEPrdeWMh9iCIcVuxO8o371bUJfaXvpQLl&route=q&message=${encodeURIComponent(message)}&flash=0&numbers=${cleanPhone}`;
+      console.log(`[Fast2SMS] Sending OTP to ${cleanPhone} via v3 API...`);
       
-      const response = await fetch(url);
+      const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+        method: "POST",
+        headers: {
+          "authorization": "Q6jXHSCpTzRMfos2ZNcBetxguOmdyklh9DU53YiGWq1Vw8AEPrdeWMh9iCIcVuxO8o371bUJfaXvpQLl",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          "route": "otp",
+          "variables_values": otp,
+          "numbers": cleanPhone
+        })
+      });
+
       const result = await response.json();
-      console.log(`[Fast2SMS] Result for ${cleanPhone}:`, result);
+      console.log(`[Fast2SMS] Full Response:`, result);
 
       if (!result.return) {
-        throw new Error(result.message || "Fast2SMS rejected the request.");
+        // If money is in "Wallet", we might need the "q" route as fallback
+        console.log("[Fast2SMS] OTP route failed, trying Quick SMS fallback...");
+        await fetch(`https://www.fast2sms.com/dev/bulkV2?authorization=Q6jXHSCpTzRMfos2ZNcBetxguOmdyklh9DU53YiGWq1Vw8AEPrdeWMh9iCIcVuxO8o371bUJfaXvpQLl&route=q&message=${encodeURIComponent(`Your OTP is ${otp}`)}&flash=0&numbers=${cleanPhone}`);
       }
     } catch (err: any) {
-      console.error("Fast2SMS Error:", err.message);
-      // Log the OTP clearly so the user can see it in Vercel Logs
-      console.log(`\n\n!!! VERIFICATION CODE for ${user.fullName}: ${otp} !!!\n\n`);
+      console.error("Fast2SMS Critical Error:", err.message);
     }
+
+    // Always log the code for the admin in the server console just in case
+    console.log(`\n\n>> VERIFICATION CODE FOR ${user.fullName}: ${otp} <<\n\n`);
 
     res.json({ message: "OTP sent successfully to registered mobile number." });
   });
