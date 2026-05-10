@@ -452,6 +452,9 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/dashboard", async (req, res) => {
+    // Auto-reject students who haven't been approved within 48 hours
+    await storage.deleteExpiredPendingUsers();
+    
     const students = await storage.getAllStudents();
     // Use IST date for admin dashboard too
     const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));

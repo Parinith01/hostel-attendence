@@ -10,6 +10,7 @@ export interface IStorage {
   updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
   deleteUnverifiedUsers(): Promise<number>;
+  deleteExpiredPendingUsers(): Promise<number>;
   getAllStudents(): Promise<User[]>;
 
   markAttendance(attendance: InsertAttendance): Promise<Attendance>;
@@ -80,6 +81,7 @@ export class MemStorage implements IStorage {
       otp: insertUser.otp ?? null,
       otpExpiry: insertUser.otpExpiry ?? null,
       isApproved: insertUser.isApproved ?? false,
+      registrationDate: insertUser.registrationDate ?? new Date().toISOString(),
     };
     this.users.set(id, user);
     return user;
@@ -99,6 +101,7 @@ export class MemStorage implements IStorage {
       otp: updateData.otp ?? user.otp,
       otpExpiry: updateData.otpExpiry ?? user.otpExpiry,
       isApproved: updateData.isApproved ?? user.isApproved,
+      registrationDate: updateData.registrationDate ?? user.registrationDate,
     };
     this.users.set(id, updatedUser);
     return updatedUser;
@@ -114,6 +117,23 @@ export class MemStorage implements IStorage {
       if (user.role === "student" && !user.isVerified) {
         this.users.delete(id);
         count++;
+      }
+    }
+    return count;
+  }
+  
+  async deleteExpiredPendingUsers(): Promise<number> {
+    let count = 0;
+    const now = Date.now();
+    const fortyEightHours = 48 * 60 * 60 * 1000;
+    
+    for (const [id, user] of Array.from(this.users.entries())) {
+      if (user.role === "student" && !user.isApproved && user.registrationDate) {
+        const regTime = new Date(user.registrationDate).getTime();
+        if (now - regTime > fortyEightHours) {
+          this.users.delete(id);
+          count++;
+        }
       }
     }
     return count;
@@ -287,6 +307,21 @@ export class DatabaseStorage implements IStorage {
       and(eq(users.role, "student"), eq(users.isVerified, false))
     ).returning();
     return deletedUsers.length;
+  }
+  
+  async deleteExpiredPendingUsers(): Promise<number> {
+    if (!db) return 0;
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    
+    const deleted = await db.delete(users).where(
+      and(
+        eq(users.role, "student"),
+        eq(users.isApproved, false),
+        lt(users.registrationDate, fortyEightHoursAgo)
+      )
+    ).returning();
+    
+    return deleted.length;
   }
 
   async getAllStudents(): Promise<User[]> {

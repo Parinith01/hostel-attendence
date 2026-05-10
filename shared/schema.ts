@@ -17,6 +17,7 @@ export const users = pgTable("users", {
   otp: text("otp"),
   otpExpiry: text("otp_expiry"),
   isApproved: boolean("is_approved").notNull().default(false),
+  registrationDate: text("registration_date"), // ISO string
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -32,6 +33,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   otp: true,
   otpExpiry: true,
   isApproved: true,
+  registrationDate: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
