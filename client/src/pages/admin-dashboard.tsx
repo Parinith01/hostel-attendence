@@ -138,22 +138,22 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleBulkDelete = async () => {
-        if (!selectedStudents.length) return;
-        if (!confirm(`Are you sure you want to delete ${selectedStudents.length} selected students? This cannot be undone.`)) return;
+    const handleBulkDelete = async (ids?: string[]) => {
+        const targets = ids || selectedStudents;
+        if (!targets.length) return;
+        if (!confirm(`Are you sure you want to remove ${targets.length} selected students? This cannot be undone.`)) return;
         
         setIsBulkDeleting(true);
         try {
-            // Use Promise.all to delete multiple students
-            const deletePromises = selectedStudents.map(id => 
+            const deletePromises = targets.map(id => 
                 fetch(`/api/admin/delete-student/${id}`, { method: 'DELETE' })
             );
             
             await Promise.all(deletePromises);
             
             toast({ 
-                title: 'Bulk Delete Successful', 
-                description: `${selectedStudents.length} students have been removed.`, 
+                title: 'Action Successful', 
+                description: `${targets.length} records have been removed.`, 
                 className: 'bg-red-600/20 text-red-300 border-red-500' 
             });
             
@@ -166,13 +166,41 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleSelectAll = (checked: boolean) => {
+    const handleBulkApprove = async () => {
+        if (!selectedStudents.length) return;
+        if (!confirm(`Approve ${selectedStudents.length} selected students?`)) return;
+        
+        setIsBulkDeleting(true); // Re-use loading state
+        try {
+            const approvePromises = selectedStudents.map(id => 
+                fetch(`/api/admin/approve-user/${id}`, { method: 'POST' })
+            );
+            
+            await Promise.all(approvePromises);
+            
+            toast({ 
+                title: 'Bulk Approval Successful', 
+                description: `${selectedStudents.length} students are now approved.`, 
+                className: 'bg-green-600/20 text-green-300 border-green-500' 
+            });
+            
+            setSelectedStudents([]);
+            fetchDashboard();
+        } catch (err: any) {
+            toast({ title: 'Error', description: 'Some students could not be approved.', variant: 'destructive' });
+        } finally {
+            setIsBulkDeleting(false);
+        }
+    };
+
+    const handleSelectAll = (checked: boolean, type: 'approved' | 'pending') => {
         if (checked) {
             const students = data?.students || [];
-            const filtered = students.filter(s => s.isApproved && (
-                s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
-                s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
-                (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
+            const query = type === 'approved' ? studentSearchQuery : approvalSearchQuery;
+            const filtered = students.filter(s => (type === 'approved' ? s.isApproved : !s.isApproved) && (
+                s.fullName.toLowerCase().includes(query.toLowerCase()) ||
+                s.userId.toLowerCase().includes(query.toLowerCase()) ||
+                (s.roomNumber && s.roomNumber.toLowerCase().includes(query.toLowerCase()))
             ));
             setSelectedStudents(filtered.map(s => s.id));
         } else {
@@ -265,6 +293,10 @@ export default function AdminDashboard() {
             // Update local state: remove absence, add new present record if applicable
             setData(prev => {
                 if (!prev) return prev;
+                const breakfastPresent = data?.attendances.filter(a => a.mealType === 'breakfast' && a.status === 'present').length || 0;
+                const dinnerPresent = data?.attendances.filter(a => a.mealType === 'dinner' && a.status === 'present').length || 0;
+                const approvedCount = data?.students.filter(s => s.isApproved).length || 0;
+                const totalStudents = approvedCount;
                 const filtered = prev.attendances.filter(a => a.id !== cancellingAbsence.id);
                 const updated = newRecord ? [...filtered, newRecord] : filtered;
                 return { ...prev, attendances: updated };
@@ -693,7 +725,7 @@ export default function AdminDashboard() {
                                                     s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                                                     (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
                                                 )).length}
-                                                onChange={(e) => handleSelectAll(e.target.checked)}
+                                                onChange={(e) => handleSelectAll(e.target.checked, 'approved')}
                                             />
                                         </th>
                                         <th className="p-4 font-normal">Full Name</th>
@@ -779,6 +811,24 @@ export default function AdminDashboard() {
                                 <p className="text-sm text-muted-foreground mt-1">Awaiting Decision: {students.filter(s => !s.isApproved).length} Students</p>
                             </div>
                             <div className="flex items-center flex-wrap gap-4">
+                                {selectedStudents.length > 0 && (
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={handleBulkApprove}
+                                            disabled={isBulkDeleting}
+                                            className="px-4 py-2 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 transition-all text-xs font-display tracking-widest font-bold flex items-center gap-2"
+                                        >
+                                            <CheckCheck className="w-4 h-4" /> {isBulkDeleting ? '...' : `APPROVE (${selectedStudents.length})`}
+                                        </button>
+                                        <button
+                                            onClick={() => handleBulkDelete()}
+                                            disabled={isBulkDeleting}
+                                            className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 transition-all text-xs font-display tracking-widest font-bold flex items-center gap-2"
+                                        >
+                                            <Trash2 className="w-4 h-4" /> REJECT
+                                        </button>
+                                    </div>
+                                )}
                                 <input
                                     type="text"
                                     placeholder="Search pending..."
@@ -786,7 +836,7 @@ export default function AdminDashboard() {
                                     onChange={e => setApprovalSearchQuery(e.target.value)}
                                     className="glass-input px-4 py-2 rounded-xl text-sm w-full sm:w-64 border border-white/10"
                                 />
-                                <button onClick={() => setShowApprovalsModal(false)} className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition">
+                                <button onClick={() => { setShowApprovalsModal(false); setSelectedStudents([]); }} className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition">
                                     <X className="w-6 h-6" />
                                 </button>
                             </div>
@@ -795,7 +845,17 @@ export default function AdminDashboard() {
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-white/5 sticky top-0 backdrop-blur-md">
                                     <tr className="border-b border-white/10 text-muted-foreground/80 text-sm font-display tracking-wider">
-                                        <th className="p-4 font-normal w-12 text-center">#</th>
+                                        <th className="p-4 font-normal w-12 text-center">
+                                            <input 
+                                                type="checkbox" 
+                                                className="accent-magenta-400 w-4 h-4"
+                                                checked={selectedStudents.length > 0 && selectedStudents.length === students.filter(s => !s.isApproved && (
+                                                    s.fullName.toLowerCase().includes(approvalSearchQuery.toLowerCase()) ||
+                                                    s.userId.toLowerCase().includes(approvalSearchQuery.toLowerCase())
+                                                )).length}
+                                                onChange={(e) => handleSelectAll(e.target.checked, 'pending')}
+                                            />
+                                        </th>
                                         <th className="p-4 font-normal">Full Name</th>
                                         <th className="p-4 font-normal">User ID</th>
                                         <th className="p-4 font-normal">Phone Number</th>
@@ -808,8 +868,15 @@ export default function AdminDashboard() {
                                         s.fullName.toLowerCase().includes(approvalSearchQuery.toLowerCase()) ||
                                         s.userId.toLowerCase().includes(approvalSearchQuery.toLowerCase())
                                     )).map((s, index) => (
-                                        <tr key={s.id} className="hover:bg-white/5 transition-colors">
-                                            <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
+                                        <tr key={s.id} className={`hover:bg-white/5 transition-colors ${selectedStudents.includes(s.id) ? 'bg-magenta-500/10' : ''}`}>
+                                            <td className="p-4 text-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="accent-magenta-400 w-4 h-4"
+                                                    checked={selectedStudents.includes(s.id)}
+                                                    onChange={() => toggleSelect(s.id)}
+                                                />
+                                            </td>
                                             <td className="p-4 text-white font-medium whitespace-nowrap">{s.fullName}</td>
                                             <td className="p-4 text-cyan-400 whitespace-nowrap">{s.userId}</td>
                                             <td className="p-4 text-white/80 whitespace-nowrap">{s.phoneNumber}</td>
