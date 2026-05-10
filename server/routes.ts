@@ -265,7 +265,25 @@ export async function registerRoutes(
 
     await storage.updateUser(user.id, { otp, otpExpiry: expiry });
 
-    console.log(`\n\n=== OTP for ${user.fullName} (${user.phoneNumber}): ${otp} ===\n\n`);
+    // REAL SMS INTEGRATION with Fast2SMS
+    try {
+      const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
+        method: "POST",
+        headers: {
+          "authorization": "Q6jXHSCpTzRMfos2ZNcBetxguOmdyklh9DU53YiGWq1Vw8AEPrdeWMh9iCIcVuxO8o371bUJfaXvpQLl",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          "route": "otp",
+          "variables_values": otp,
+          "numbers": user.phoneNumber
+        })
+      });
+      const result = await response.json();
+      console.log(`[Fast2SMS] Sent to ${user.phoneNumber}:`, result);
+    } catch (err: any) {
+      console.error("Fast2SMS Error:", err.message);
+    }
 
     res.json({ message: "OTP sent successfully to registered mobile number." });
   });
