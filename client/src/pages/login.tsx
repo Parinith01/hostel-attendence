@@ -62,8 +62,6 @@ export default function Login() {
 
             if (userData.role === "admin") {
                 setLocation("/admin-dashboard");
-            } else if (!userData.isVerified) {
-                setLocation("/verify-otp");
             } else {
                 setLocation("/dashboard");
             }

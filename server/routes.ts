@@ -254,71 +254,7 @@ export async function registerRoutes(
     res.json({ message: "Password updated successfully." });
   });
 
-  app.post("/api/send-otp", async (req, res) => {
-    const { userId } = req.body;
-    const user = await storage.getUserByUserId(userId);
-    if (!user) return res.status(404).json({ message: "User not found." });
-    if (user.isVerified) return res.status(400).json({ message: "User already verified." });
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = new Date(Date.now() + 10 * 60000).toISOString(); 
-
-    await storage.updateUser(user.id, { otp, otpExpiry: expiry });
-
-    // Clean phone number: Remove +91, spaces, dashes, etc.
-    const cleanPhone = user.phoneNumber.replace(/\D/g, '').slice(-10);
-
-    // REAL SMS INTEGRATION - FAST2SMS OTP Route (Cheap & Instant)
-    try {
-      console.log(`[Fast2SMS] Sending Instant OTP to ${cleanPhone}...`);
-      
-      const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
-        method: "POST",
-        headers: {
-          "authorization": "Q6jXHSCpTzRMfos2ZNcBetxguOmdyklh9DU53YiGWq1Vw8AEPrdeWMh9iCIcVuxO8o371bUJfaXvpQLl",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          "route": "otp",
-          "variables_values": otp,
-          "numbers": cleanPhone
-        })
-      });
-
-      const result = await response.json();
-      console.log(`[Fast2SMS] Response:`, result);
-
-      if (!result.return) {
-        // Fallback to Quick SMS only if OTP fails
-        console.warn("[Fast2SMS] OTP route rejected, using Quick SMS fallback...");
-        await fetch(`https://www.fast2sms.com/dev/bulkV2?authorization=Q6jXHSCpTzRMfos2ZNcBetxguOmdyklh9DU53YiGWq1Vw8AEPrdeWMh9iCIcVuxO8o371bUJfaXvpQLl&route=q&message=${encodeURIComponent(`Your OTP is ${otp}`)}&flash=0&numbers=${cleanPhone}`);
-      }
-    } catch (err: any) {
-      console.error("Fast2SMS Error:", err.message);
-    }
-
-    // Always log for the admin
-    console.log(`\n\n>> VERIFICATION CODE: ${otp} <<\n\n`);
-
-    res.json({ message: "OTP sent successfully to registered mobile number." });
-  });
-
-  app.post("/api/verify-otp", async (req, res) => {
-    const { userId, otp } = req.body;
-    const user = await storage.getUserByUserId(userId);
-    if (!user) return res.status(404).json({ message: "User not found." });
-    
-    if (user.otp !== otp) {
-      return res.status(400).json({ message: "Invalid OTP." });
-    }
-
-    if (!user.otpExpiry || new Date() > new Date(user.otpExpiry)) {
-      return res.status(400).json({ message: "OTP has expired." });
-    }
-
-    const updated = await storage.updateUser(user.id, { isVerified: true, otp: null, otpExpiry: null });
-    res.json({ message: "Verification successful.", user: updated });
-  });
 
   app.get("/api/user/:userId", async (req, res) => {
     const { userId } = req.params;

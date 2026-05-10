@@ -150,26 +150,7 @@ export default function AdminDashboard() {
         }
     };
 
-    const handlePurgeUnverified = async () => {
-        if (!confirm("Are you sure you want to delete all students who have not verified their OTP? This action cannot be undone.")) return;
-        setIsPurging(true);
-        try {
-            const res = await fetch("/api/admin/purge-unverified", { method: 'DELETE' });
-            if (!res.ok) throw new Error("Failed to purge unverified users");
-            
-            const result = await res.json();
-            toast({ 
-                title: 'Purge Successful', 
-                description: result.message, 
-                className: 'bg-green-600/20 text-green-300 border-green-500' 
-            });
-            fetchDashboard();
-        } catch (err: any) {
-            toast({ title: 'Error', description: err.message, variant: 'destructive' });
-        } finally {
-            setIsPurging(false);
-        }
-    };
+
 
     const handleLeaveAction = async (id: string, status: 'approved' | 'rejected') => {
         setProcessingLeaveId(id);
@@ -625,13 +606,7 @@ export default function AdminDashboard() {
                                 <p className="text-sm text-muted-foreground mt-1">Total Active Directory: {totalStudents} Students</p>
                             </div>
                             <div className="flex items-center flex-wrap gap-4">
-                                <button
-                                    onClick={handlePurgeUnverified}
-                                    disabled={isPurging}
-                                    className="px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-500/60 transition-all text-xs font-display tracking-widest font-semibold flex items-center gap-2"
-                                >
-                                    {isPurging ? "PURGING..." : <><Trash2 className="w-4 h-4" /> PURGE UNVERIFIED</>}
-                                </button>
+
                                 <input
                                     type="text"
                                     placeholder="Search by name, ID, or room..."
