@@ -220,7 +220,7 @@ export async function registerRoutes(
       if (existingUser) {
         return res.status(400).json({ message: "User ID already exists." });
       }
-      const user = await storage.createUser(req.body);
+      const user = await storage.createUser({ ...req.body, isVerified: true });
       res.status(201).json(user);
     } catch (e) {
       res.status(500).json({ message: "Error during registration." });
