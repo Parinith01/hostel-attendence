@@ -265,8 +265,12 @@ export async function registerRoutes(
 
     await storage.updateUser(user.id, { otp, otpExpiry: expiry });
 
+    // Clean phone number: Remove +91, spaces, dashes, etc.
+    const cleanPhone = user.phoneNumber.replace(/\D/g, '').slice(-10);
+
     // REAL SMS INTEGRATION with Fast2SMS
     try {
+      console.log(`[Fast2SMS] Attempting to send OTP to ${cleanPhone}...`);
       const response = await fetch("https://www.fast2sms.com/dev/bulkV2", {
         method: "POST",
         headers: {
@@ -276,13 +280,21 @@ export async function registerRoutes(
         body: JSON.stringify({
           "route": "otp",
           "variables_values": otp,
-          "numbers": user.phoneNumber
+          "numbers": cleanPhone
         })
       });
+      
       const result = await response.json();
-      console.log(`[Fast2SMS] Sent to ${user.phoneNumber}:`, result);
+      console.log(`[Fast2SMS] Result for ${cleanPhone}:`, result);
+
+      if (!result.return) {
+        throw new Error(result.message || "Fast2SMS rejected the request.");
+      }
     } catch (err: any) {
       console.error("Fast2SMS Error:", err.message);
+      // We still return success to the user so they can use the console OTP for now if needed
+      // BUT we log the OTP clearly in the console so you can see it in Vercel.
+      console.log(`\n\n!!! EMERGENCY OTP for ${user.fullName}: ${otp} !!!\n\n`);
     }
 
     res.json({ message: "OTP sent successfully to registered mobile number." });
