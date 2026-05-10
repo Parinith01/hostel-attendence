@@ -72,6 +72,8 @@ export default function AdminDashboard() {
     const [showApprovalsModal, setShowApprovalsModal] = useState(false);
     const [studentSearchQuery, setStudentSearchQuery] = useState("");
     const [approvalSearchQuery, setApprovalSearchQuery] = useState("");
+    const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [cancellingAbsence, setCancellingAbsence] = useState<Attendance | null>(null);
     const [cancelReason, setCancelReason] = useState("");
@@ -118,13 +120,14 @@ export default function AdminDashboard() {
     };
 
     const handleDeleteStudent = async (student: Student) => {
-        if (!confirm(`Remove "${student.fullName}" (${student.userId}) from the system? This cannot be undone.`)) return;
+        if (!confirm(`Are you sure you want to remove ${student.fullName}?`)) return;
         setDeletingId(student.id);
         try {
-            const res = await fetch(`/api/admin/students/${student.id}`, { method: 'DELETE' });
+            const res = await fetch(`/api/admin/delete-student/${student.id}`, { method: 'DELETE' });
             if (res.ok) {
-                setData(prev => prev ? { ...prev, students: prev.students.filter(s => s.id !== student.id) } : prev);
-                toast({ title: 'Student Removed', description: `${student.fullName} has been removed.`, className: 'bg-red-900/80 text-red-100 border-red-700' });
+                toast({ title: 'Student Removed', description: 'Student has been deleted from the directory.', className: 'bg-red-600/20 text-red-300 border-red-500' });
+                fetchDashboard();
+                setSelectedStudents(prev => prev.filter(id => id !== student.id));
             } else {
                 throw new Error('Failed to delete');
             }
@@ -133,6 +136,54 @@ export default function AdminDashboard() {
         } finally {
             setDeletingId(null);
         }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!selectedStudents.length) return;
+        if (!confirm(`Are you sure you want to delete ${selectedStudents.length} selected students? This cannot be undone.`)) return;
+        
+        setIsBulkDeleting(true);
+        try {
+            // Use Promise.all to delete multiple students
+            const deletePromises = selectedStudents.map(id => 
+                fetch(`/api/admin/delete-student/${id}`, { method: 'DELETE' })
+            );
+            
+            await Promise.all(deletePromises);
+            
+            toast({ 
+                title: 'Bulk Delete Successful', 
+                description: `${selectedStudents.length} students have been removed.`, 
+                className: 'bg-red-600/20 text-red-300 border-red-500' 
+            });
+            
+            setSelectedStudents([]);
+            fetchDashboard();
+        } catch (err: any) {
+            toast({ title: 'Error', description: 'Some students could not be deleted.', variant: 'destructive' });
+        } finally {
+            setIsBulkDeleting(false);
+        }
+    };
+
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) {
+            const students = data?.students || [];
+            const filtered = students.filter(s => s.isApproved && (
+                s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
+            ));
+            setSelectedStudents(filtered.map(s => s.id));
+        } else {
+            setSelectedStudents([]);
+        }
+    };
+
+    const toggleSelect = (id: string) => {
+        setSelectedStudents(prev => 
+            prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]
+        );
     };
 
     const handleApproveStudent = async (student: Student) => {
@@ -608,6 +659,15 @@ export default function AdminDashboard() {
                                 <p className="text-sm text-muted-foreground mt-1">Total Approved Students: {students.filter(s => s.isApproved).length}</p>
                             </div>
                             <div className="flex items-center flex-wrap gap-4">
+                                {selectedStudents.length > 0 && (
+                                    <button
+                                        onClick={handleBulkDelete}
+                                        disabled={isBulkDeleting}
+                                        className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 transition-all text-xs font-display tracking-widest font-bold flex items-center gap-2"
+                                    >
+                                        <Trash2 className="w-4 h-4" /> {isBulkDeleting ? 'DELETING...' : `DELETE SELECTED (${selectedStudents.length})`}
+                                    </button>
+                                )}
                                 <input
                                     type="text"
                                     placeholder="Search by name, ID, or room..."
@@ -624,7 +684,18 @@ export default function AdminDashboard() {
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-white/5 sticky top-0 backdrop-blur-md">
                                     <tr className="border-b border-white/10 text-muted-foreground/80 text-sm font-display tracking-wider">
-                                        <th className="p-4 font-normal w-12 text-center">#</th>
+                                        <th className="p-4 font-normal w-12 text-center">
+                                            <input 
+                                                type="checkbox" 
+                                                className="accent-cyan-400 w-4 h-4"
+                                                checked={selectedStudents.length > 0 && selectedStudents.length === students.filter(s => s.isApproved && (
+                                                    s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                                                    s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                                                    (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
+                                                )).length}
+                                                onChange={(e) => handleSelectAll(e.target.checked)}
+                                            />
+                                        </th>
                                         <th className="p-4 font-normal">Full Name</th>
                                         <th className="p-4 font-normal">User ID</th>
                                         <th className="p-4 font-normal">Phone Number</th>
@@ -639,8 +710,15 @@ export default function AdminDashboard() {
                                         s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                                         (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
                                     )).map((s, index) => (
-                                        <tr key={s.id} className="hover:bg-white/5 transition-colors">
-                                            <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
+                                        <tr key={s.id} className={`hover:bg-white/5 transition-colors ${selectedStudents.includes(s.id) ? 'bg-cyan-500/10' : ''}`}>
+                                            <td className="p-4 text-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="accent-cyan-400 w-4 h-4"
+                                                    checked={selectedStudents.includes(s.id)}
+                                                    onChange={() => toggleSelect(s.id)}
+                                                />
+                                            </td>
                                             <td className="p-4 text-white font-medium whitespace-nowrap">
                                                 <div className="flex items-center gap-2">
                                                     {s.fullName}
