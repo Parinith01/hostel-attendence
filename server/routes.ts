@@ -136,7 +136,7 @@ export async function registerRoutes(
     res.json(att);
   });
 
-  app.delete("/api/admin/students/:id", async (req, res) => {
+  app.delete("/api/admin/delete-student/:id", async (req, res) => {
     const { id } = req.params;
     const deleted = await storage.deleteUser(id);
     if (!deleted) return res.status(404).json({ message: "Student not found." });
