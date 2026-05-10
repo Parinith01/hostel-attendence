@@ -497,6 +497,24 @@ export async function registerRoutes(
       sundayTokens,
     });
   });
+  
+  app.get("/api/admin/monthly-data", async (req, res) => {
+    const monthYear = String(req.query.monthYear); // YYYY-MM
+    if (!monthYear || !monthYear.match(/^\d{4}-\d{2}$/)) {
+        return res.status(400).json({ message: "Invalid monthYear format. Use YYYY-MM" });
+    }
+    
+    const students = await storage.getAllStudents();
+    const approvedStudents = students.filter(s => s.isApproved);
+    const monthlyAttendance = await storage.getMonthlyAttendance(monthYear);
+    const leaveRequests = await storage.getAllLeaveRequests();
+    
+    res.json({
+        students: approvedStudents,
+        attendance: monthlyAttendance,
+        leaveRequests: leaveRequests.filter(lr => lr.status === 'approved' && lr.monthYear === monthYear)
+    });
+  });
 
   return httpServer;
 }

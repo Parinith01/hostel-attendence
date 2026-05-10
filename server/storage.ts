@@ -11,7 +11,9 @@ export interface IStorage {
   deleteUser(id: string): Promise<boolean>;
   deleteUnverifiedUsers(): Promise<number>;
   deleteExpiredPendingUsers(): Promise<number>;
+  deleteExpiredPendingUsers(): Promise<number>;
   getAllStudents(): Promise<User[]>;
+  getMonthlyAttendance(monthYear: string): Promise<Attendance[]>;
 
   markAttendance(attendance: InsertAttendance): Promise<Attendance>;
   getAttendanceByDate(date: string): Promise<Attendance[]>;
@@ -147,6 +149,10 @@ export class MemStorage implements IStorage {
         if (roomCompare !== 0) return roomCompare;
         return (a.fullName || "").localeCompare(b.fullName || "");
       });
+  }
+
+  async getMonthlyAttendance(monthYear: string): Promise<Attendance[]> {
+    return Array.from(this.attendances.values()).filter(a => a.date.startsWith(monthYear));
   }
 
   async markAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {
@@ -333,6 +339,11 @@ export class DatabaseStorage implements IStorage {
       if (roomCompare !== 0) return roomCompare;
       return (a.fullName || "").localeCompare(b.fullName || "");
     });
+  }
+
+  async getMonthlyAttendance(monthYear: string): Promise<Attendance[]> {
+    if (!db) return [];
+    return await db.select().from(attendance).where(sql`${attendance.date} LIKE ${monthYear + '%'}`);
   }
 
   async markAttendance(insertAttendance: InsertAttendance): Promise<Attendance> {

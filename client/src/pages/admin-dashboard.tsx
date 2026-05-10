@@ -67,6 +67,7 @@ export default function AdminDashboard() {
     const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(todayIST);
+    const [selectedMonth, setSelectedMonth] = useState(todayIST.substring(0, 7)); // YYYY-MM
     const [savingSettings, setSavingSettings] = useState(false);
     const [showStudentsModal, setShowStudentsModal] = useState(false);
     const [showApprovalsModal, setShowApprovalsModal] = useState(false);
@@ -453,6 +454,96 @@ export default function AdminDashboard() {
         });
 
         doc.save(`${mealName}_Attendance_${data.date}.pdf`);
+    };
+
+    const downloadMonthlyPDF = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/admin/monthly-data?monthYear=${selectedMonth}`);
+            if (!res.ok) throw new Error("Failed to fetch monthly data");
+            const { students, attendance, leaveRequests } = await res.json();
+
+            const doc = new jsPDF('l', 'mm', 'a4');
+            doc.setFontSize(18);
+            doc.text(`Monthly Attendance Report: ${selectedMonth}`, 14, 20);
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Generated on ${new Date().toLocaleString()}`, 14, 28);
+
+            const parts = selectedMonth.split('-');
+            const year = parseInt(parts[0]);
+            const month = parseInt(parts[1]);
+            const daysInMonth = new Date(year, month, 0).getDate();
+
+            const tableData = students.map((s: Student, idx: number) => {
+                const sAtt = attendance.filter((a: Attendance) => a.userId === s.userId);
+                
+                let bPresent = 0, bAbsent = 0, bPermission = 0;
+                let dPresent = 0, dAbsent = 0, dPermission = 0;
+
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+                    
+                    // Check Leave/Permission first
+                    const onLeave = leaveRequests.find((lr: any) => dateStr >= lr.startDate && dateStr <= lr.endDate);
+                    
+                    // Breakfast
+                    const bMark = sAtt.find((a: Attendance) => a.date === dateStr && a.mealType === 'breakfast');
+                    if (onLeave) bPermission++;
+                    else if (bMark?.status === 'present') bPresent++;
+                    else if (bMark?.status === 'absent') bAbsent++;
+
+                    // Dinner
+                    const dMark = sAtt.find((a: Attendance) => a.date === dateStr && a.mealType === 'dinner');
+                    if (onLeave) dPermission++;
+                    else if (dMark?.status === 'present') dPresent++;
+                    else if (dMark?.status === 'absent') dAbsent++;
+                }
+
+                return [
+                    idx + 1,
+                    s.fullName,
+                    s.roomNumber,
+                    bPresent, bAbsent, bPermission,
+                    dPresent, dAbsent, dPermission
+                ];
+            });
+
+            autoTable(doc, {
+                head: [
+                    [
+                        { content: 'S.No', rowSpan: 2 },
+                        { content: 'Student Name', rowSpan: 2 },
+                        { content: 'Room', rowSpan: 2 },
+                        { content: 'Breakfast', colSpan: 3, styles: { halign: 'center', fillColor: [6, 182, 212] } },
+                        { content: 'Dinner', colSpan: 3, styles: { halign: 'center', fillColor: [236, 72, 153] } }
+                    ],
+                    ['Pres', 'Abs', 'Perm', 'Pres', 'Abs', 'Perm']
+                ],
+                body: tableData,
+                startY: 35,
+                theme: 'grid',
+                headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255], fontSize: 9, fontStyle: 'bold' },
+                columnStyles: {
+                    0: { cellWidth: 12 },
+                    1: { cellWidth: 'auto' },
+                    2: { cellWidth: 20 },
+                    3: { cellWidth: 15, halign: 'center' },
+                    4: { cellWidth: 15, halign: 'center' },
+                    5: { cellWidth: 15, halign: 'center' },
+                    6: { cellWidth: 15, halign: 'center' },
+                    7: { cellWidth: 15, halign: 'center' },
+                    8: { cellWidth: 15, halign: 'center' }
+                }
+            });
+
+            doc.save(`Monthly_Report_${selectedMonth}.pdf`);
+            toast({ title: "Report Generated", description: `Attendance report for ${selectedMonth} is ready.` });
+        } catch (err: any) {
+            toast({ title: "Error", description: err.message, variant: "destructive" });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const sendWarning = async (student: Student) => {
@@ -1007,6 +1098,21 @@ export default function AdminDashboard() {
                                 <button onClick={() => downloadMealPDF('dinner')} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/30 text-magenta-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] group text-xs font-display tracking-widest">
                                     <Download className="w-4 h-4 mr-1.5 group-hover:-translate-y-1 transition-transform" /> DINNER PDF
                                 </button>
+                                <div className="flex-1 min-w-[250px] flex gap-2 p-1 bg-white/5 border border-white/10 rounded-xl">
+                                    <input
+                                        type="month"
+                                        value={selectedMonth}
+                                        onChange={e => setSelectedMonth(e.target.value)}
+                                        className="bg-transparent border-none outline-none text-white text-xs font-mono px-3 py-1 flex-1"
+                                    />
+                                    <button
+                                        onClick={downloadMonthlyPDF}
+                                        className="px-4 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-400 text-white text-[10px] font-display font-bold tracking-widest uppercase transition-all shadow-[0_0_10px_rgba(249,115,22,0.4)] flex items-center gap-2"
+                                    >
+                                        <CalendarDays className="w-3 h-3" /> MONTHLY REPORT
+                                    </button>
+                                </div>
+                            </div>
                             </div>
                         </div>
 
@@ -1175,7 +1281,8 @@ export default function AdminDashboard() {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="border-b border-white/5 text-muted-foreground/80 text-sm font-display tracking-wider">
-                                        <th className="p-4 font-normal">Student ID</th>
+                                        <th className="p-4 font-normal">Student</th>
+                                        <th className="p-4 font-normal">Room</th>
                                         <th className="p-4 font-normal">Reason</th>
                                         <th className="p-4 font-normal">Duration</th>
                                         <th className="p-4 font-normal text-center">Status</th>
@@ -1185,38 +1292,49 @@ export default function AdminDashboard() {
                                 <tbody className="divide-y divide-white/5">
                                     {leaveRequests.length === 0 ? (
                                         <tr>
-                                            <td colSpan={5} className="p-12 text-center text-muted-foreground">No leave requests found.</td>
+                                            <td colSpan={6} className="p-12 text-center text-muted-foreground">No leave requests found.</td>
                                         </tr>
                                     ) : (
-                                        leaveRequests.map(lr => (
-                                            <tr key={lr.id} className="hover:bg-white/5 transition-colors">
-                                                <td className="p-4 whitespace-nowrap text-white font-medium">{lr.userId}</td>
-                                                <td className="p-4">
-                                                    <p className="text-xs text-white/70 italic max-w-xs truncate" title={lr.reason}>"{lr.reason}"</p>
-                                                </td>
-                                                <td className="p-4 whitespace-nowrap text-xs text-white/50">
-                                                    <span className="text-orange-400">{lr.startDate}</span> → <span className="text-orange-400">{lr.endDate}</span>
-                                                </td>
-                                                <td className="p-4 text-center">
-                                                    <span className={`text-[10px] font-display font-bold tracking-widest uppercase px-2 py-0.5 rounded-full border flex items-center justify-center gap-1 w-max mx-auto ${lr.status === 'approved' ? 'bg-green-500/20 border-green-500/40 text-green-400' : lr.status === 'rejected' ? 'bg-red-500/20 border-red-500/40 text-red-400' : 'bg-orange-500/20 border-orange-500/40 text-orange-400'}`}>
-                                                        {lr.status === 'approved' ? <CheckCheck className="w-3 h-3" /> : lr.status === 'rejected' ? <XCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                                                        {lr.status}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-right">
-                                                    {lr.status === 'pending' ? (
-                                                        <button
-                                                            onClick={() => setShowLeaveModal(lr)}
-                                                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 hover:border-orange-500/40 transition-colors text-xs font-display tracking-widest font-semibold"
-                                                        >
-                                                            <Send className="w-3 h-3" /> REVIEW
-                                                        </button>
-                                                    ) : (
-                                                        <span className="text-[10px] text-muted-foreground font-display uppercase tracking-widest">PROCESSED</span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))
+                                        leaveRequests.map(lr => {
+                                            const student = students.find(s => s.userId === lr.userId);
+                                            return (
+                                                <tr key={lr.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
+                                                    <td className="p-4">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-bold text-white tracking-wider">{student?.fullName || 'Unknown'}</span>
+                                                            <span className="text-[10px] text-muted-foreground uppercase">{lr.userId}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-4 whitespace-nowrap text-sm text-muted-foreground">
+                                                        {student?.roomNumber} - {student?.hostelBlock}
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <p className="text-xs text-white/70 italic max-w-xs truncate" title={lr.reason}>"{lr.reason}"</p>
+                                                    </td>
+                                                    <td className="p-4 whitespace-nowrap text-xs text-white/50">
+                                                        <span className="text-orange-400">{lr.startDate}</span> → <span className="text-orange-400">{lr.endDate}</span>
+                                                    </td>
+                                                    <td className="p-4 text-center">
+                                                        <span className={`text-[10px] font-display font-bold tracking-widest uppercase px-2 py-0.5 rounded-full border flex items-center justify-center gap-1 w-max mx-auto ${lr.status === 'approved' ? 'bg-green-500/20 border-green-500/40 text-green-400' : lr.status === 'rejected' ? 'bg-red-500/20 border-red-500/40 text-red-400' : 'bg-orange-500/20 border-orange-500/40 text-orange-400'}`}>
+                                                            {lr.status === 'approved' ? <CheckCheck className="w-3 h-3" /> : lr.status === 'rejected' ? <XCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                                            {lr.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        {lr.status === 'pending' ? (
+                                                            <button
+                                                                onClick={() => setShowLeaveModal(lr)}
+                                                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 hover:border-orange-500/40 transition-colors text-xs font-display tracking-widest font-semibold"
+                                                            >
+                                                                <Send className="w-3 h-3" /> REVIEW
+                                                            </button>
+                                                        ) : (
+                                                            <span className="text-[10px] text-muted-foreground font-display uppercase tracking-widest">PROCESSED</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
                                     )}
                                 </tbody>
                             </table>
