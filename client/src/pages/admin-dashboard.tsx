@@ -784,7 +784,7 @@ export default function AdminDashboard() {
                             <div className="flex items-center flex-wrap gap-4">
                                 {selectedStudents.length > 0 && (
                                     <button
-                                        onClick={handleBulkDelete}
+                                        onClick={() => handleBulkDelete()}
                                         disabled={isBulkDeleting}
                                         className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 transition-all text-xs font-display tracking-widest font-bold flex items-center gap-2"
                                     >
@@ -905,7 +905,7 @@ export default function AdminDashboard() {
                                 {selectedStudents.length > 0 && (
                                     <div className="flex gap-2">
                                         <button
-                                            onClick={handleBulkApprove}
+                                            onClick={() => handleBulkApprove()}
                                             disabled={isBulkDeleting}
                                             className="px-4 py-2 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 transition-all text-xs font-display tracking-widest font-bold flex items-center gap-2"
                                         >
@@ -1112,7 +1112,6 @@ export default function AdminDashboard() {
                                         <CalendarDays className="w-3 h-3" /> MONTHLY REPORT
                                     </button>
                                 </div>
-                            </div>
                             </div>
                         </div>
 
