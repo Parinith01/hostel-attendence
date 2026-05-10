@@ -69,7 +69,9 @@ export default function AdminDashboard() {
     const [selectedDate, setSelectedDate] = useState(todayIST);
     const [savingSettings, setSavingSettings] = useState(false);
     const [showStudentsModal, setShowStudentsModal] = useState(false);
+    const [showApprovalsModal, setShowApprovalsModal] = useState(false);
     const [studentSearchQuery, setStudentSearchQuery] = useState("");
+    const [approvalSearchQuery, setApprovalSearchQuery] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [cancellingAbsence, setCancellingAbsence] = useState<Attendance | null>(null);
     const [cancelReason, setCancelReason] = useState("");
@@ -596,17 +598,16 @@ export default function AdminDashboard() {
                 </div>
             )}
 
-            {/* Students Modal */}
+            {/* Registered Students Modal (Approved Only) */}
             {showStudentsModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="glass-card w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl border border-white/20 overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-200">
                         <div className="p-6 border-b border-white/10 flex flex-col sm:flex-row gap-4 sm:justify-between sm:items-center bg-white/5">
                             <div>
-                                <h2 className="font-display tracking-widest text-xl font-bold text-white uppercase">Registered Students List</h2>
-                                <p className="text-sm text-muted-foreground mt-1">Total Active Directory: {totalStudents} Students</p>
+                                <h2 className="font-display tracking-widest text-xl font-bold text-white uppercase">Registered Student List</h2>
+                                <p className="text-sm text-muted-foreground mt-1">Total Approved Students: {students.filter(s => s.isApproved).length}</p>
                             </div>
                             <div className="flex items-center flex-wrap gap-4">
-
                                 <input
                                     type="text"
                                     placeholder="Search by name, ID, or room..."
@@ -629,15 +630,15 @@ export default function AdminDashboard() {
                                         <th className="p-4 font-normal">Phone Number</th>
                                         <th className="p-4 font-normal">Room</th>
                                         <th className="p-4 font-normal">Block</th>
-                                        <th className="p-4 font-normal text-center">Remove</th>
+                                        <th className="p-4 font-normal text-center">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {students.filter(s =>
+                                    {students.filter(s => s.isApproved && (
                                         s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                                         s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                                         (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
-                                    ).map((s, index) => (
+                                    )).map((s, index) => (
                                         <tr key={s.id} className="hover:bg-white/5 transition-colors">
                                             <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
                                             <td className="p-4 text-white font-medium whitespace-nowrap">
@@ -664,14 +665,6 @@ export default function AdminDashboard() {
                                             <td className="p-4 text-magenta-300 font-medium">{s.roomNumber}</td>
                                             <td className="p-4 text-white/80">{s.hostelBlock}</td>
                                             <td className="p-4 text-center">
-                                                {!s.isApproved && (
-                                                    <button
-                                                        onClick={() => handleApproveStudent(s)}
-                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/25 text-green-400 hover:text-green-300 border border-green-500/30 hover:border-green-500/60 transition-all text-xs font-display tracking-widest font-semibold mr-2"
-                                                    >
-                                                        <CheckCheck className="w-3 h-3" /> APPROVE
-                                                    </button>
-                                                )}
                                                 <button
                                                     onClick={() => handleDeleteStudent(s)}
                                                     disabled={deletingId === s.id}
@@ -682,13 +675,90 @@ export default function AdminDashboard() {
                                             </td>
                                         </tr>
                                     ))}
-                                    {students.filter(s =>
+                                    {students.filter(s => s.isApproved && (
                                         s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                                         s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                                         (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
-                                    ).length === 0 && (
+                                    )).length === 0 && (
                                             <tr>
-                                                <td colSpan={7} className="p-8 text-center text-muted-foreground">No students found.</td>
+                                                <td colSpan={7} className="p-8 text-center text-muted-foreground">No registered students found.</td>
+                                            </tr>
+                                        )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Admin Approval Panel Modal (Pending Only) */}
+            {showApprovalsModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="glass-card w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl border border-white/20 overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-white/10 flex flex-col sm:flex-row gap-4 sm:justify-between sm:items-center bg-white/5">
+                            <div>
+                                <h2 className="font-display tracking-widest text-xl font-bold text-white uppercase">Pending Approvals Panel</h2>
+                                <p className="text-sm text-muted-foreground mt-1">Awaiting Decision: {students.filter(s => !s.isApproved).length} Students</p>
+                            </div>
+                            <div className="flex items-center flex-wrap gap-4">
+                                <input
+                                    type="text"
+                                    placeholder="Search pending..."
+                                    value={approvalSearchQuery}
+                                    onChange={e => setApprovalSearchQuery(e.target.value)}
+                                    className="glass-input px-4 py-2 rounded-xl text-sm w-full sm:w-64 border border-white/10"
+                                />
+                                <button onClick={() => setShowApprovalsModal(false)} className="p-2 rounded-full hover:bg-white/10 text-muted-foreground hover:text-white transition">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="overflow-auto p-0 flex-1">
+                            <table className="w-full text-left border-collapse">
+                                <thead className="bg-white/5 sticky top-0 backdrop-blur-md">
+                                    <tr className="border-b border-white/10 text-muted-foreground/80 text-sm font-display tracking-wider">
+                                        <th className="p-4 font-normal w-12 text-center">#</th>
+                                        <th className="p-4 font-normal">Full Name</th>
+                                        <th className="p-4 font-normal">User ID</th>
+                                        <th className="p-4 font-normal">Phone Number</th>
+                                        <th className="p-4 font-normal">Room</th>
+                                        <th className="p-4 font-normal text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {students.filter(s => !s.isApproved && (
+                                        s.fullName.toLowerCase().includes(approvalSearchQuery.toLowerCase()) ||
+                                        s.userId.toLowerCase().includes(approvalSearchQuery.toLowerCase())
+                                    )).map((s, index) => (
+                                        <tr key={s.id} className="hover:bg-white/5 transition-colors">
+                                            <td className="p-4 text-muted-foreground font-mono text-center">{index + 1}</td>
+                                            <td className="p-4 text-white font-medium whitespace-nowrap">{s.fullName}</td>
+                                            <td className="p-4 text-cyan-400 whitespace-nowrap">{s.userId}</td>
+                                            <td className="p-4 text-white/80 whitespace-nowrap">{s.phoneNumber}</td>
+                                            <td className="p-4 text-magenta-300 font-medium">{s.roomNumber}</td>
+                                            <td className="p-4 text-center">
+                                                <button
+                                                    onClick={() => handleApproveStudent(s)}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/25 text-green-400 hover:text-green-300 border border-green-500/30 hover:border-green-500/60 transition-all text-xs font-display tracking-widest font-semibold mr-2"
+                                                >
+                                                    <CheckCheck className="w-3 h-3" /> APPROVE
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteStudent(s)}
+                                                    disabled={deletingId === s.id}
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-500/60 transition-all text-xs font-display tracking-widest font-semibold disabled:opacity-50"
+                                                >
+                                                    <Trash2 className="w-3 h-3" /> REJECT
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {students.filter(s => !s.isApproved && (
+                                        s.fullName.toLowerCase().includes(approvalSearchQuery.toLowerCase()) ||
+                                        s.userId.toLowerCase().includes(approvalSearchQuery.toLowerCase())
+                                    )).length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="p-8 text-center text-muted-foreground">No pending approvals found.</td>
                                             </tr>
                                         )}
                                 </tbody>
@@ -775,8 +845,16 @@ export default function AdminDashboard() {
                             </div>
 
                             <div className="flex flex-wrap gap-2">
+                                <button onClick={() => setShowApprovalsModal(true)} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-magenta-500/10 hover:bg-magenta-500/20 border border-magenta-500/30 text-magenta-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(236,72,153,0.2)] hover:shadow-[0_0_20px_rgba(236,72,153,0.4)] group text-xs font-display tracking-widest relative">
+                                    <UserCheck className="w-4 h-4 mr-1.5" /> PENDING APPROVALS
+                                    {data?.students.filter(s => !s.isApproved).length ? (
+                                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.5)]">
+                                            {data.students.filter(s => !s.isApproved).length}
+                                        </span>
+                                    ) : null}
+                                </button>
                                 <button onClick={() => setShowStudentsModal(true)} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-xs font-display tracking-widest">
-                                    <Eye className="w-4 h-4 mr-1.5" /> VIEW STUDENTS
+                                    <Eye className="w-4 h-4 mr-1.5" /> REGISTERED LIST
                                 </button>
                                 <button onClick={() => downloadMealPDF('breakfast')} className="flex-1 min-w-[120px] px-3 py-2.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:text-white flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] group text-xs font-display tracking-widest">
                                     <Download className="w-4 h-4 mr-1.5 group-hover:-translate-y-1 transition-transform" /> BREAKFAST PDF
