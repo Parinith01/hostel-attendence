@@ -79,8 +79,8 @@ export default function Register() {
             }
 
             toast({
-                title: "Registration Successful",
-                description: "You can now log in using your auto-generated ID and password.",
+                title: "Registration Submitted",
+                description: "Your account is pending admin approval. You will be able to log in once approved.",
                 className: "bg-primary text-primary-foreground border-primary glow-cyan",
             });
             setLocation("/login");

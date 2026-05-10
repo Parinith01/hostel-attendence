@@ -9,6 +9,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
+  deleteUnverifiedUsers(): Promise<number>;
   getAllStudents(): Promise<User[]>;
 
   markAttendance(attendance: InsertAttendance): Promise<Attendance>;
@@ -51,7 +52,8 @@ export class MemStorage implements IStorage {
       phoneNumber: "0000000000",
       roomNumber: "N/A",
       hostelBlock: "Admin Block",
-      role: "admin"
+      role: "admin",
+      isApproved: true
     });
   }
 
@@ -73,6 +75,11 @@ export class MemStorage implements IStorage {
       roomNumber: insertUser.roomNumber ?? null,
       hostelBlock: insertUser.hostelBlock ?? null,
       role: insertUser.role ?? "student",
+      warnings: insertUser.warnings ?? 0,
+      isVerified: insertUser.isVerified ?? false,
+      otp: insertUser.otp ?? null,
+      otpExpiry: insertUser.otpExpiry ?? null,
+      isApproved: insertUser.isApproved ?? false,
     };
     this.users.set(id, user);
     return user;
@@ -88,6 +95,10 @@ export class MemStorage implements IStorage {
       hostelBlock: updateData.hostelBlock ?? user.hostelBlock,
       role: updateData.role ?? user.role,
       warnings: updateData.warnings ?? user.warnings,
+      isVerified: updateData.isVerified ?? user.isVerified,
+      otp: updateData.otp ?? user.otp,
+      otpExpiry: updateData.otpExpiry ?? user.otpExpiry,
+      isApproved: updateData.isApproved ?? user.isApproved,
     };
     this.users.set(id, updatedUser);
     return updatedUser;
@@ -95,6 +106,17 @@ export class MemStorage implements IStorage {
 
   async deleteUser(id: string): Promise<boolean> {
     return this.users.delete(id);
+  }
+
+  async deleteUnverifiedUsers(): Promise<number> {
+    let count = 0;
+    for (const [id, user] of Array.from(this.users.entries())) {
+      if (user.role === "student" && !user.isVerified) {
+        this.users.delete(id);
+        count++;
+      }
+    }
+    return count;
   }
 
   async getAllStudents(): Promise<User[]> {
@@ -257,6 +279,14 @@ export class DatabaseStorage implements IStorage {
     if (!db) return false;
     await db.delete(users).where(eq(users.id, id));
     return true;
+  }
+
+  async deleteUnverifiedUsers(): Promise<number> {
+    if (!db) return 0;
+    const deletedUsers = await db.delete(users).where(
+      and(eq(users.role, "student"), eq(users.isVerified, false))
+    ).returning();
+    return deletedUsers.length;
   }
 
   async getAllStudents(): Promise<User[]> {

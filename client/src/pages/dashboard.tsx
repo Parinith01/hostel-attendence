@@ -83,6 +83,10 @@ export default function Dashboard() {
         const storedUser = localStorage.getItem("user");
         if (storedUser) {
             const user = JSON.parse(storedUser);
+            if (!user.isVerified) {
+                window.location.href = "/verify-otp";
+                return;
+            }
             fetch(`/api/attendance/today?userId=${user.userId}`)
                 .then(res => res.json())
                 .then((records: { mealType: string; status: string }[]) => {

@@ -13,6 +13,7 @@ type Student = {
     roomNumber: string;
     hostelBlock: string;
     warnings?: number;
+    isApproved: boolean;
 };
 
 type Attendance = {
@@ -75,12 +76,13 @@ export default function AdminDashboard() {
     const [markingPresent, setMarkingPresent] = useState(false);
     const [activeTab, setActiveTab] = useState<"dashboard" | "leave" | "password">("dashboard");
     const [passwordData, setPasswordData] = useState({ current: "", new: "", confirm: "" });
-    
+
     // For approving/rejecting leave
     const [processingLeaveId, setProcessingLeaveId] = useState<string | null>(null);
     const [adminNote, setAdminNote] = useState("");
     const [showLeaveModal, setShowLeaveModal] = useState<LeaveRequest | null>(null);
     const [showPassword, setShowPassword] = useState(false);
+    const [isPurging, setIsPurging] = useState(false);
 
     const { toast } = useToast();
 
@@ -131,6 +133,44 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleApproveStudent = async (student: Student) => {
+        try {
+            const res = await fetch(`/api/admin/approve-user/${student.id}`, { method: 'POST' });
+            if (res.ok) {
+                setData(prev => prev ? {
+                    ...prev,
+                    students: prev.students.map(s => s.id === student.id ? { ...s, isApproved: true } : s)
+                } : prev);
+                toast({ title: 'Student Approved', description: `${student.fullName} is now approved.`, className: 'bg-green-600/20 text-green-300 border-green-500' });
+            } else {
+                throw new Error('Failed to approve');
+            }
+        } catch {
+            toast({ title: 'Error', description: 'Could not approve student.', variant: 'destructive' });
+        }
+    };
+
+    const handlePurgeUnverified = async () => {
+        if (!confirm("Are you sure you want to delete all students who have not verified their OTP? This action cannot be undone.")) return;
+        setIsPurging(true);
+        try {
+            const res = await fetch("/api/admin/purge-unverified", { method: 'DELETE' });
+            if (!res.ok) throw new Error("Failed to purge unverified users");
+            
+            const result = await res.json();
+            toast({ 
+                title: 'Purge Successful', 
+                description: result.message, 
+                className: 'bg-green-600/20 text-green-300 border-green-500' 
+            });
+            fetchDashboard();
+        } catch (err: any) {
+            toast({ title: 'Error', description: err.message, variant: 'destructive' });
+        } finally {
+            setIsPurging(false);
+        }
+    };
+
     const handleLeaveAction = async (id: string, status: 'approved' | 'rejected') => {
         setProcessingLeaveId(id);
         try {
@@ -146,7 +186,7 @@ export default function AdminDashboard() {
             setLeaveRequests(prev => prev.map(lr => lr.id === id ? updatedLr : lr));
             setShowLeaveModal(null);
             setAdminNote("");
-            
+
             toast({
                 title: status === 'approved' ? 'Leave Approved' : 'Leave Rejected',
                 description: `Request has been marked as ${status}.`,
@@ -534,7 +574,7 @@ export default function AdminDashboard() {
                                 <p className="text-xs text-white/80">Requested Dates: <span className="text-orange-300">{showLeaveModal.startDate}</span> to <span className="text-orange-300">{showLeaveModal.endDate}</span></p>
                                 <p className="text-xs text-white/80 italic mt-2">"{showLeaveModal.reason}"</p>
                             </div>
-                            
+
                             <div>
                                 <label className="text-[10px] font-display tracking-widest text-white/50 uppercase mb-1 block">Admin Note (optional)</label>
                                 <textarea
@@ -584,7 +624,14 @@ export default function AdminDashboard() {
                                 <h2 className="font-display tracking-widest text-xl font-bold text-white uppercase">Registered Students List</h2>
                                 <p className="text-sm text-muted-foreground mt-1">Total Active Directory: {totalStudents} Students</p>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center flex-wrap gap-4">
+                                <button
+                                    onClick={handlePurgeUnverified}
+                                    disabled={isPurging}
+                                    className="px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-500/60 transition-all text-xs font-display tracking-widest font-semibold flex items-center gap-2"
+                                >
+                                    {isPurging ? "PURGING..." : <><Trash2 className="w-4 h-4" /> PURGE UNVERIFIED</>}
+                                </button>
                                 <input
                                     type="text"
                                     placeholder="Search by name, ID, or room..."
@@ -611,8 +658,8 @@ export default function AdminDashboard() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {students.filter(s => 
-                                        s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
+                                    {students.filter(s =>
+                                        s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                                         s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                                         (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
                                     ).map((s, index) => (
@@ -626,7 +673,7 @@ export default function AdminDashboard() {
                                                             <span className="text-red-400 text-[10px] px-2 py-0.5">
                                                                 {s.warnings} Warning{s.warnings > 1 ? 's' : ''}
                                                             </span>
-                                                            <button 
+                                                            <button
                                                                 onClick={(e) => { e.stopPropagation(); removeWarning(s); }}
                                                                 className="pr-1.5 pl-0.5 py-0.5 text-red-400/50 hover:text-red-300 hover:bg-red-500/10 rounded-r-full transition-colors"
                                                                 title="Remove Warning"
@@ -642,6 +689,14 @@ export default function AdminDashboard() {
                                             <td className="p-4 text-magenta-300 font-medium">{s.roomNumber}</td>
                                             <td className="p-4 text-white/80">{s.hostelBlock}</td>
                                             <td className="p-4 text-center">
+                                                {!s.isApproved && (
+                                                    <button
+                                                        onClick={() => handleApproveStudent(s)}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/25 text-green-400 hover:text-green-300 border border-green-500/30 hover:border-green-500/60 transition-all text-xs font-display tracking-widest font-semibold mr-2"
+                                                    >
+                                                        <CheckCheck className="w-3 h-3" /> APPROVE
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => handleDeleteStudent(s)}
                                                     disabled={deletingId === s.id}
@@ -652,15 +707,15 @@ export default function AdminDashboard() {
                                             </td>
                                         </tr>
                                     ))}
-                                    {students.filter(s => 
-                                        s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
+                                    {students.filter(s =>
+                                        s.fullName.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                                         s.userId.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
                                         (s.roomNumber && s.roomNumber.toLowerCase().includes(studentSearchQuery.toLowerCase()))
                                     ).length === 0 && (
-                                        <tr>
-                                            <td colSpan={7} className="p-8 text-center text-muted-foreground">No students found.</td>
-                                        </tr>
-                                    )}
+                                            <tr>
+                                                <td colSpan={7} className="p-8 text-center text-muted-foreground">No students found.</td>
+                                            </tr>
+                                        )}
                                 </tbody>
                             </table>
                         </div>
@@ -847,7 +902,7 @@ export default function AdminDashboard() {
                                                                         <span className="text-red-400 text-[10px] px-2 py-0.5">
                                                                             {student.warnings} Warning{student.warnings > 1 ? 's' : ''}
                                                                         </span>
-                                                                        <button 
+                                                                        <button
                                                                             onClick={(e) => { e.stopPropagation(); removeWarning(student); }}
                                                                             className="pr-1.5 pl-0.5 py-0.5 text-red-400/50 hover:text-red-300 hover:bg-red-500/10 rounded-r-full transition-colors"
                                                                             title="Remove Warning"
@@ -1058,21 +1113,21 @@ export default function AdminDashboard() {
 
 // Re-using some icons from Lucide
 function Clock(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  )
+    return (
+        <svg
+            {...props}
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+        </svg>
+    )
 }

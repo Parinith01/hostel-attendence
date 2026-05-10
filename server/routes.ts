@@ -143,6 +143,22 @@ export async function registerRoutes(
     res.json({ message: "Student removed successfully." });
   });
 
+  app.delete("/api/admin/purge-unverified", async (req, res) => {
+    try {
+      const deletedCount = await storage.deleteUnverifiedUsers();
+      res.json({ message: `Successfully removed ${deletedCount} unverified student(s).`, count: deletedCount });
+    } catch (err: any) {
+      res.status(500).json({ message: "Failed to purge unverified users." });
+    }
+  });
+
+  app.post("/api/admin/approve-user/:id", async (req, res) => {
+    const { id } = req.params;
+    const updated = await storage.updateUser(id, { isApproved: true });
+    if (!updated) return res.status(404).json({ message: "Student not found." });
+    res.json({ message: "Student approved successfully.", user: updated });
+  });
+
   // Admin: Send a warning to a student (increments warning counter)
   app.post("/api/admin/warn-student", async (req, res) => {
     const { userId } = req.body;
@@ -219,6 +235,10 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Invalid credentials or portal selection." });
     }
 
+    if (!user.isApproved) {
+      return res.status(401).json({ message: "Your account is pending admin approval." });
+    }
+
     res.json(user);
   });
 
@@ -232,6 +252,39 @@ export async function registerRoutes(
 
     await storage.updateUser(user.id, { password: newPassword });
     res.json({ message: "Password updated successfully." });
+  });
+
+  app.post("/api/send-otp", async (req, res) => {
+    const { userId } = req.body;
+    const user = await storage.getUserByUserId(userId);
+    if (!user) return res.status(404).json({ message: "User not found." });
+    if (user.isVerified) return res.status(400).json({ message: "User already verified." });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiry = new Date(Date.now() + 10 * 60000).toISOString(); 
+
+    await storage.updateUser(user.id, { otp, otpExpiry: expiry });
+
+    console.log(`\n\n=== OTP for ${user.fullName} (${user.phoneNumber}): ${otp} ===\n\n`);
+
+    res.json({ message: "OTP sent successfully to registered mobile number." });
+  });
+
+  app.post("/api/verify-otp", async (req, res) => {
+    const { userId, otp } = req.body;
+    const user = await storage.getUserByUserId(userId);
+    if (!user) return res.status(404).json({ message: "User not found." });
+    
+    if (user.otp !== otp) {
+      return res.status(400).json({ message: "Invalid OTP." });
+    }
+
+    if (!user.otpExpiry || new Date() > new Date(user.otpExpiry)) {
+      return res.status(400).json({ message: "OTP has expired." });
+    }
+
+    const updated = await storage.updateUser(user.id, { isVerified: true, otp: null, otpExpiry: null });
+    res.json({ message: "Verification successful.", user: updated });
   });
 
   app.get("/api/user/:userId", async (req, res) => {

@@ -9,6 +9,7 @@ import Register from "@/pages/register";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import AdminDashboard from "@/pages/admin-dashboard";
+import VerifyOtp from "@/pages/verify-otp";
 
 function Router() {
   return (
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/admin-dashboard" component={AdminDashboard} />
+      <Route path="/verify-otp" component={VerifyOtp} />
       <Route component={NotFound} />
     </Switch>
   );
