@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, useSearch, Link } from "wouter";
-import { User, Lock, ArrowRight, ArrowLeft, Eye, EyeOff, KeyRound, Phone, CheckCircle } from "lucide-react";
+import { User, Lock, ArrowRight, ArrowLeft, Eye, EyeOff, KeyRound, Phone, CheckCircle, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
@@ -19,6 +19,11 @@ export default function Login() {
     const { toast } = useToast();
     const search = useSearch();
     const [, setLocation] = useLocation();
+
+    const [needsVerification, setNeedsVerification] = useState(false);
+    const [verifyUserId, setVerifyUserId] = useState("");
+    const [verifyEmail, setVerifyEmail] = useState("");
+    const [otp, setOtp] = useState("");
 
     const isParamsAdmin = search.includes("role=admin");
     const portalName = isParamsAdmin ? "Admin Portal" : "Student Portal";
@@ -46,13 +51,19 @@ export default function Login() {
                 body: JSON.stringify({ userId, password, role: isParamsAdmin ? "admin" : "student" })
             });
 
+            const data = await res.json();
             if (!res.ok) {
-                const errorData = await res.json();
-                throw new Error(errorData.message || "Invalid credentials");
+                if (data.needsVerification) {
+                    setNeedsVerification(true);
+                    setVerifyUserId(data.userId);
+                    setVerifyEmail(data.email);
+                    toast({ title: "Verification Required", description: data.message });
+                    return;
+                }
+                throw new Error(data.message || "Invalid credentials");
             }
 
-            const userData = await res.json();
-            localStorage.setItem("user", JSON.stringify(userData));
+            localStorage.setItem("user", JSON.stringify(data));
 
             toast({
                 title: "Login Successful",
@@ -60,7 +71,7 @@ export default function Login() {
                 className: isParamsAdmin ? "bg-primary text-primary-foreground border-primary glow-magenta" : "bg-primary text-primary-foreground border-primary glow-cyan",
             });
 
-            if (userData.role === "admin") {
+            if (data.role === "admin") {
                 setLocation("/admin-dashboard");
             } else {
                 setLocation("/dashboard");
@@ -68,6 +79,38 @@ export default function Login() {
         } catch (err: any) {
             toast({
                 title: "Login Failed",
+                description: err.message,
+                variant: "destructive"
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleVerifyOtp = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsLoading(true);
+
+        try {
+            const res = await fetch("/api/verify-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: verifyUserId, otp })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || "Invalid OTP.");
+
+            toast({
+                title: "Verification Successful",
+                description: "Your email has been verified. Please wait for admin approval.",
+                className: "bg-primary text-primary-foreground border-primary glow-cyan",
+            });
+            setNeedsVerification(false);
+            setUserId(""); setPassword("");
+        } catch (err: any) {
+            toast({
+                title: "Verification Failed",
                 description: err.message,
                 variant: "destructive"
             });
@@ -117,6 +160,54 @@ export default function Login() {
             setIsLoading(false);
         }
     };
+
+    if (needsVerification) {
+        return (
+            <div className="min-h-[100dvh] flex items-center justify-center p-4">
+                <div className="bg-orb orb-1"></div>
+                <div className="glass-card w-full max-w-md p-8 z-10 text-center flex flex-col gap-6 animate-in fade-in zoom-in duration-300">
+                    <div className="mx-auto w-16 h-16 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400">
+                        <CheckCircle className="w-8 h-8" />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-white mb-2">Verify Your Account</h1>
+                        <p className="text-muted-foreground text-sm">Please verify your email <span className="text-white">{verifyEmail}</span> to continue.</p>
+                    </div>
+
+                    <form onSubmit={handleVerifyOtp} className="space-y-6">
+                        <input
+                            type="text"
+                            maxLength={6}
+                            value={otp}
+                            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                            className="glass-input w-full text-center text-3xl tracking-[0.5rem] py-4 rounded-xl font-bold text-white focus:glow-cyan"
+                            placeholder="000000"
+                            required
+                        />
+
+                        <button
+                            type="submit"
+                            disabled={isLoading || otp.length !== 6}
+                            className="w-full relative overflow-hidden group rounded-xl font-bold py-3.5 text-white disabled:opacity-50"
+                        >
+                            <div className="absolute inset-0 bg-cyan-500/80 glow-cyan"></div>
+                            <span className="relative flex items-center justify-center gap-2 text-white font-bold">
+                                {isLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : "Verify & Continue"}
+                            </span>
+                        </button>
+                        
+                        <button
+                            type="button"
+                            onClick={() => setNeedsVerification(false)}
+                            className="text-sm text-muted-foreground hover:text-white transition-colors"
+                        >
+                            Back to Login
+                        </button>
+                    </form>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-[100dvh] flex items-center justify-center p-4">

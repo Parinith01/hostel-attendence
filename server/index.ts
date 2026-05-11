@@ -4,10 +4,12 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { pool } from "./db";
 
 const app = express();
-app.use(cors({ origin: "*" }));
+app.use(cors({ origin: true, credentials: true }));
+app.use(cookieParser());
 const httpServer = createServer(app);
 
 declare module "http" {
@@ -66,10 +68,27 @@ app.use((req, res, next) => {
 (async () => {
   try {
     if (pool) {
+      // Attendance migrations
       await pool.query(`ALTER TABLE "attendance" ADD COLUMN IF NOT EXISTS "return_date" text;`);
       await pool.query(`ALTER TABLE "attendance" ADD COLUMN IF NOT EXISTS "return_meal_type" text;`);
       await pool.query(`ALTER TABLE "attendance" ADD COLUMN IF NOT EXISTS "sunday_token" text;`);
-      log("Database schema migrated for absentee fields & sunday token.");
+      
+      // Users migrations
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "email" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "ip_address" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "device_fingerprint" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "suspicious_score" integer DEFAULT 0;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_suspicious" boolean DEFAULT false;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_banned" boolean DEFAULT false;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "otp" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "otp_expiry" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_verified" boolean DEFAULT false;`);
+      
+      // Update existing users to be verified if they don't have an email (legacy)
+      // or just ensure they are verified if they were already approved.
+      await pool.query(`UPDATE "users" SET "is_verified" = true WHERE "is_approved" = true AND "is_verified" = false;`);
+      
+      log("Database schema migrated for security & absentee fields.");
     }
   } catch (e: any) {
     console.error("Failed to run schema migrations on startup:", e.message);

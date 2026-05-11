@@ -6,13 +6,18 @@ import { eq, and, lt, gte, sql } from "drizzle-orm";
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUserId(userId: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByPhoneNumber(phoneNumber: string): Promise<User | undefined>;
+  getUsersByIP(ip: string): Promise<User[]>;
+  getUsersByFingerprint(fingerprint: string): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, user: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>;
   deleteUnverifiedUsers(): Promise<number>;
   deleteExpiredPendingUsers(): Promise<number>;
-  deleteExpiredPendingUsers(): Promise<number>;
-  getAllStudents(): Promise<User[]>;
+  getAllStudents(status?: string): Promise<User[]>;
+  getSuspiciousUsers(): Promise<User[]>;
+  getActiveStudentCount(): Promise<number>;
   getMonthlyAttendance(monthYear: string): Promise<Attendance[]>;
 
   markAttendance(attendance: InsertAttendance): Promise<Attendance>;
@@ -23,6 +28,7 @@ export interface IStorage {
   updateSettings(settings: Partial<Settings>): Promise<Settings>;
   getAttendanceById(id: string): Promise<Attendance | undefined>;
   verifyAttendance(id: string, verified: boolean, sundayToken?: string | null): Promise<Attendance | undefined>;
+  updateAttendance(id: string, data: Partial<InsertAttendance>): Promise<Attendance | undefined>;
   deleteAttendance(id: string): Promise<boolean>;
   getMonthlyAbsentCount(userId: string, monthYear: string): Promise<number>;
 
@@ -50,13 +56,15 @@ export class MemStorage implements IStorage {
     // Seed an admin user
     this.createUser({
       userId: "admin123",
+      email: "admin@hostel.com",
       password: "password123",
       fullName: "System Admin",
       phoneNumber: "0000000000",
       roomNumber: "N/A",
       hostelBlock: "Admin Block",
       role: "admin",
-      isApproved: true
+      isApproved: true,
+      isVerified: true
     });
   }
 
@@ -70,11 +78,28 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(u => u.email === email);
+  }
+
+  async getUserByPhoneNumber(phoneNumber: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(u => u.phoneNumber === phoneNumber);
+  }
+
+  async getUsersByIP(ip: string): Promise<User[]> {
+    return Array.from(this.users.values()).filter(u => u.ipAddress === ip);
+  }
+
+  async getUsersByFingerprint(fingerprint: string): Promise<User[]> {
+    return Array.from(this.users.values()).filter(u => u.deviceFingerprint === fingerprint);
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
     const user: User = {
       ...insertUser,
       id,
+      email: insertUser.email,
       roomNumber: insertUser.roomNumber ?? null,
       hostelBlock: insertUser.hostelBlock ?? null,
       role: insertUser.role ?? "student",
@@ -84,6 +109,15 @@ export class MemStorage implements IStorage {
       otpExpiry: insertUser.otpExpiry ?? null,
       isApproved: insertUser.isApproved ?? false,
       registrationDate: insertUser.registrationDate ?? new Date().toISOString(),
+      status: insertUser.status ?? "Active",
+      joiningMonthYear: insertUser.joiningMonthYear ?? null,
+      leavingMonthYear: insertUser.leavingMonthYear ?? null,
+      createdAt: new Date().toISOString(),
+      ipAddress: insertUser.ipAddress ?? null,
+      deviceFingerprint: insertUser.deviceFingerprint ?? null,
+      suspiciousScore: insertUser.suspiciousScore ?? 0,
+      isSuspicious: insertUser.isSuspicious ?? false,
+      isBanned: insertUser.isBanned ?? false,
     };
     this.users.set(id, user);
     return user;
@@ -95,6 +129,7 @@ export class MemStorage implements IStorage {
     const updatedUser = {
       ...user,
       ...updateData,
+      email: updateData.email ?? user.email,
       roomNumber: updateData.roomNumber ?? user.roomNumber,
       hostelBlock: updateData.hostelBlock ?? user.hostelBlock,
       role: updateData.role ?? user.role,
@@ -104,6 +139,14 @@ export class MemStorage implements IStorage {
       otpExpiry: updateData.otpExpiry ?? user.otpExpiry,
       isApproved: updateData.isApproved ?? user.isApproved,
       registrationDate: updateData.registrationDate ?? user.registrationDate,
+      status: updateData.status ?? user.status,
+      joiningMonthYear: updateData.joiningMonthYear ?? user.joiningMonthYear,
+      leavingMonthYear: updateData.leavingMonthYear ?? user.leavingMonthYear,
+      ipAddress: updateData.ipAddress ?? user.ipAddress,
+      deviceFingerprint: updateData.deviceFingerprint ?? user.deviceFingerprint,
+      suspiciousScore: updateData.suspiciousScore ?? user.suspiciousScore,
+      isSuspicious: updateData.isSuspicious ?? user.isSuspicious,
+      isBanned: updateData.isBanned ?? user.isBanned,
     };
     this.users.set(id, updatedUser);
     return updatedUser;
@@ -141,14 +184,22 @@ export class MemStorage implements IStorage {
     return count;
   }
 
-  async getAllStudents(): Promise<User[]> {
+  async getAllStudents(status?: string): Promise<User[]> {
     return Array.from(this.users.values())
-      .filter(u => u.role === "student")
+      .filter(u => u.role === "student" && (!status || u.status === status))
       .sort((a, b) => {
         const roomCompare = (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, { numeric: true });
         if (roomCompare !== 0) return roomCompare;
         return (a.fullName || "").localeCompare(b.fullName || "");
       });
+  }
+
+  async getSuspiciousUsers(): Promise<User[]> {
+    return Array.from(this.users.values()).filter(u => u.isSuspicious || u.suspiciousScore > 5);
+  }
+
+  async getActiveStudentCount(): Promise<number> {
+    return Array.from(this.users.values()).filter(u => u.role === "student" && u.status === "Active").length;
   }
 
   async getMonthlyAttendance(monthYear: string): Promise<Attendance[]> {
@@ -213,6 +264,14 @@ export class MemStorage implements IStorage {
     }
     this.attendances.set(id, att);
     return att;
+  }
+
+  async updateAttendance(id: string, data: Partial<InsertAttendance>): Promise<Attendance | undefined> {
+    const att = this.attendances.get(id);
+    if (!att) return undefined;
+    const updated = { ...att, ...data };
+    this.attendances.set(id, updated);
+    return updated;
   }
 
   async deleteAttendance(id: string): Promise<boolean> {
@@ -289,6 +348,28 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    if (!db) return undefined;
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getUserByPhoneNumber(phoneNumber: string): Promise<User | undefined> {
+    if (!db) return undefined;
+    const [user] = await db.select().from(users).where(eq(users.phoneNumber, phoneNumber));
+    return user;
+  }
+
+  async getUsersByIP(ip: string): Promise<User[]> {
+    if (!db) return [];
+    return await db.select().from(users).where(eq(users.ipAddress, ip));
+  }
+
+  async getUsersByFingerprint(fingerprint: string): Promise<User[]> {
+    if (!db) return [];
+    return await db.select().from(users).where(eq(users.deviceFingerprint, fingerprint));
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     if (!db) throw new Error("DB not connected");
     const [user] = await db.insert(users).values(insertUser).returning();
@@ -330,15 +411,28 @@ export class DatabaseStorage implements IStorage {
     return deleted.length;
   }
 
-  async getAllStudents(): Promise<User[]> {
+  async getActiveStudentCount(): Promise<number> {
+    if (!db) return 0;
+    const list = await db.select().from(users).where(and(eq(users.role, "student"), eq(users.status, "Active")));
+    return list.length;
+  }
+
+  async getAllStudents(status?: string): Promise<User[]> {
     if (!db) return [];
-    // Fetch all and sort in memory for natural alphanumeric sorting (Drizzle's order by is strictly lexical)
-    const list = await db.select().from(users).where(eq(users.role, "student"));
+    const condition = status 
+      ? and(eq(users.role, "student"), eq(users.status, status))
+      : eq(users.role, "student");
+    const list = await db.select().from(users).where(condition);
     return list.sort((a, b) => {
       const roomCompare = (a.roomNumber || "").localeCompare(b.roomNumber || "", undefined, { numeric: true });
       if (roomCompare !== 0) return roomCompare;
       return (a.fullName || "").localeCompare(b.fullName || "");
     });
+  }
+
+  async getSuspiciousUsers(): Promise<User[]> {
+    if (!db) return [];
+    return await db.select().from(users).where(sql`${users.isSuspicious} = true OR ${users.suspiciousScore} > 5`);
   }
 
   async getMonthlyAttendance(monthYear: string): Promise<Attendance[]> {
@@ -405,6 +499,12 @@ export class DatabaseStorage implements IStorage {
       updateData.sundayToken = sundayToken;
     }
     const [att] = await db.update(attendance).set(updateData).where(eq(attendance.id, id)).returning();
+    return att;
+  }
+
+  async updateAttendance(id: string, data: Partial<InsertAttendance>): Promise<Attendance | undefined> {
+    if (!db) return undefined;
+    const [att] = await db.update(attendance).set(data).where(eq(attendance.id, id)).returning();
     return att;
   }
 

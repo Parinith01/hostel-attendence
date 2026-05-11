@@ -6,6 +6,7 @@ import { z } from "zod";
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: text("user_id").notNull().unique(),
+  email: text("email").notNull().unique(),
   password: text("password").notNull(),
   fullName: text("full_name").notNull(),
   phoneNumber: text("phone_number").notNull(),
@@ -18,10 +19,22 @@ export const users = pgTable("users", {
   otpExpiry: text("otp_expiry"),
   isApproved: boolean("is_approved").notNull().default(false),
   registrationDate: text("registration_date"), // ISO string
+  status: text("status").notNull().default("Active"), // 'Active' | 'Left Hostel' | 'Suspended' | 'Completed'
+  joiningMonthYear: text("joining_month_year"), // YYYY-MM
+  leavingMonthYear: text("leaving_month_year"), // YYYY-MM
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+  ipAddress: text("ip_address"),
+  deviceFingerprint: text("device_fingerprint"),
+  suspiciousScore: integer("suspicious_score").notNull().default(0),
+  isSuspicious: boolean("is_suspicious").notNull().default(false),
+  isBanned: boolean("is_banned").notNull().default(false),
+  failedLoginAttempts: integer("failed_login_attempts").notNull().default(0),
+  lockUntil: text("lock_until"), // ISO string
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
   userId: true,
+  email: true,
   password: true,
   fullName: true,
   phoneNumber: true,
@@ -34,6 +47,16 @@ export const insertUserSchema = createInsertSchema(users).pick({
   otpExpiry: true,
   isApproved: true,
   registrationDate: true,
+  status: true,
+  joiningMonthYear: true,
+  leavingMonthYear: true,
+  ipAddress: true,
+  deviceFingerprint: true,
+  suspiciousScore: true,
+  isSuspicious: true,
+  isBanned: true,
+  failedLoginAttempts: true,
+  lockUntil: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
