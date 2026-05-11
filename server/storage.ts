@@ -1,4 +1,4 @@
-import { users, attendance, settings, leaveRequests, type User, type InsertUser, type Attendance, type InsertAttendance, type Settings, type LeaveRequest, type InsertLeaveRequest } from "@shared/schema";
+import { users, attendance, settings, leaveRequests, type User, type InsertUser, type Attendance, type InsertAttendance, type Settings, type LeaveRequest, type InsertLeaveRequest } from "../shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
 import { eq, and, lt, gte, sql } from "drizzle-orm";

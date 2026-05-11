@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { type Response, type Request, type NextFunction } from "express";
 import { storage } from "./storage";
 import nodemailer from "nodemailer";
-import { type User } from "@shared/schema";
+import { type User } from "../shared/schema";
 
 const JWT_SECRET = process.env.JWT_SECRET || "hostel-attendance-secret-key-2024";
 const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
