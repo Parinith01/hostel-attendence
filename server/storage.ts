@@ -118,6 +118,8 @@ export class MemStorage implements IStorage {
       suspiciousScore: insertUser.suspiciousScore ?? 0,
       isSuspicious: insertUser.isSuspicious ?? false,
       isBanned: insertUser.isBanned ?? false,
+      failedLoginAttempts: insertUser.failedLoginAttempts ?? 0,
+      lockUntil: insertUser.lockUntil ?? null,
     };
     this.users.set(id, user);
     return user;

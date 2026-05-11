@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
 import { createServer, type Server } from "http";
+import { z } from "zod";
 import { storage } from "./storage";
 import { 
   hashPassword, 
@@ -9,6 +10,7 @@ import {
   clearAuthCookie, 
   sendOTPEmail, 
   calculateSuspiciousScore,
+  verifyCaptcha,
   authenticateToken,
 } from "./auth_helpers";
 import rateLimit from "express-rate-limit";
@@ -286,14 +288,14 @@ export async function registerRoutes(
 
   app.post("/api/admin/ban-user/:id", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ message: "Forbidden" });
-    const { id } = req.params;
+    const id = req.params.id as string;
     await storage.updateUser(id, { isBanned: true });
     res.json({ message: "User banned successfully." });
   });
 
   app.post("/api/admin/unban-user/:id", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ message: "Forbidden" });
-    const { id } = req.params;
+    const id = req.params.id as string;
     await storage.updateUser(id, { isBanned: false });
     res.json({ message: "User unbanned successfully." });
   });
@@ -444,7 +446,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/delete-student/:id", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ message: "Forbidden" });
-    const { id } = req.params;
+    const id = req.params.id as string;
     const student = await storage.getUser(id);
     if (!student) return res.status(404).json({ message: "Student not found." });
     
@@ -461,7 +463,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/update-student-status/:id", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ message: "Forbidden" });
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { status } = req.body;
     const updateData: any = { status };
     if (status === 'Left Hostel') {
@@ -476,7 +478,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/approve-user/:id", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ message: "Forbidden" });
-    const { id } = req.params;
+    const id = req.params.id as string;
     const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
     const joiningMonthYear = nowIST.getFullYear() + '-' + String(nowIST.getMonth() + 1).padStart(2, '0');
     const updated = await storage.updateUser(id, { isApproved: true, status: 'Active', joiningMonthYear });
@@ -542,7 +544,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/process-leave/:id", authenticateToken, async (req, res) => {
     if ((req as any).user.role !== 'admin') return res.status(403).json({ message: "Forbidden" });
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { status, adminNote } = req.body;
     const lr = await storage.updateLeaveRequestStatus(id, status, adminNote);
     res.json(lr);

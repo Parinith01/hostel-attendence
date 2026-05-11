@@ -83,6 +83,8 @@ app.use((req, res, next) => {
       await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "otp" text;`);
       await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "otp_expiry" text;`);
       await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_verified" boolean DEFAULT false;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "failed_login_attempts" integer DEFAULT 0;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "lock_until" text;`);
       
       // Update existing users to be verified if they don't have an email (legacy)
       // or just ensure they are verified if they were already approved.
