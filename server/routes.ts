@@ -212,7 +212,21 @@ export async function registerRoutes(
       return res.status(403).json({ message: `Account locked due to multiple failed attempts. Try again in ${waitMinutes} minutes.` });
     }
 
-    const match = await comparePassword(password, user.password);
+    // Password check — supports legacy plaintext passwords and auto-migrates to bcrypt
+    const isHashed = user.password.startsWith("$2a$") || user.password.startsWith("$2b$");
+    let match = false;
+    
+    if (isHashed) {
+      match = await comparePassword(password, user.password);
+    } else {
+      // Legacy plaintext password — direct comparison + auto-migrate
+      match = (password === user.password);
+      if (match) {
+        const hashed = await hashPassword(password);
+        await storage.updateUser(user.id, { password: hashed });
+      }
+    }
+
     if (!match) {
       const attempts = (user.failedLoginAttempts || 0) + 1;
       const updateData: any = { failedLoginAttempts: attempts };
