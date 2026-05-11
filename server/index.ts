@@ -73,8 +73,17 @@ app.use((req, res, next) => {
       await pool.query(`ALTER TABLE "attendance" ADD COLUMN IF NOT EXISTS "return_meal_type" text;`);
       await pool.query(`ALTER TABLE "attendance" ADD COLUMN IF NOT EXISTS "sunday_token" text;`);
       
-      // Users migrations
+      // Users migrations - ensure all schema columns exist
       await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "email" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "room_number" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "hostel_block" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "warnings" integer DEFAULT 0;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_approved" boolean DEFAULT false;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "status" text DEFAULT 'Active';`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "registration_date" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "joining_month_year" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "leaving_month_year" text;`);
+      await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "created_at" text;`);
       await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "ip_address" text;`);
       await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "device_fingerprint" text;`);
       await pool.query(`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "suspicious_score" integer DEFAULT 0;`);
