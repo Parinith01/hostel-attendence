@@ -1,0 +1,28 @@
+Given the focus of this system on strict registration logic, dual-meal tracking windows, and admin control over warnings, I have designed a prompt to visualize the **Student Attendance Portal**.
+
+This prompt utilizes the **"Cyber-Rave Glassmorphism"** aesthetic you favor, balancing the technical nature of the login with the discipline-focused purpose of the hostel.
+
+---
+
+### ## The Student Attendance Portal Prompt
+
+Copy and paste this into an AI image generator (like Midjourney or DALL-E) to visualize the front-end interface:
+
+> **Prompt:** A UI design of a mobile application login screen for a Smart Hostel Attendance Portal. The design utilizes a strict Glassmorphism aesthetic with a Cyber-Rave color palette. The background is a dark deep-space blue with soft, glowing neon cyan and magenta gradient orbs. The main login container is a central, semi-transparent frosted glass card with a thin, glowing neon edge.
+> **Key Elements:**
+> * **Header Text:** "Hostel Hub: Daily Check-in" in a sleek, futuristic sans-serif font.
+> * **User ID Input:** A transparent input field with a glowing border and a small, glowing icon of a student. It shows placeholder text: "Enter ID (e.g., rah3210)".
+> * **Password Input:** A similar transparent input field showing "Must be 8 characters".
+> * **Attendance Button:** A prominent button labeled "Mark Dinner Attendance" that glows with a neon magenta light (indicating the current window).
+> * **Time Display:** At the bottom, a faint clock displays "Window: 6:00 PM - 10:00 PM" with a small, stylized icon of a dining plate.
+> * **Vibe:** Professional, clean, digital, high-tech, 4k render, Unreal Engine 5 aesthetic.
+> 
+> 
+
+---
+
+### ### How to Use This Visual
+
+If you generate this image, you can use it as a reference (a "Mockup") in your portfolio. To prove your technical capability, you should then attempt to recreate this *visual layout* using **CSS** or **Flutter**.
+
+**Would you like me to generate a SQL schema for handling student warnings, or perhaps the Flutter code for the specific text fields in this Glassmorphism design?**
